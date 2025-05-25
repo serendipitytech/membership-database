@@ -4,8 +4,8 @@ import Layout from '../../components/Layout/Layout';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
-import { supabase, getCurrentUser } from '../../lib/supabase';
-import { Plus, Edit2, Trash2, ChevronRight } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 interface InterestCategory {
   id: string;
@@ -24,70 +24,68 @@ interface Interest {
 }
 
 const AdminInterests: React.FC = () => {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<InterestCategory[]>([]);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [editingCategory, setEditingCategory] = useState<InterestCategory | null>(null);
   const [editingInterest, setEditingInterest] = useState<Interest | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkAdminStatus = async () => {
-      try {
-        const { user } = await getCurrentUser();
-        
-        if (!user) {
-          navigate('/login');
-          return;
-        }
-        
-        const { data: adminData } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (!adminData) {
-          navigate('/');
-          return;
-        }
-        
-        setIsAdmin(true);
-        await fetchCategories();
-      } catch (error) {
-        console.error('Error checking admin status:', error);
-        navigate('/');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
     checkAdminStatus();
-  }, [navigate]);
+    fetchCategories();
+  }, []);
+
+  const checkAdminStatus = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
+      // Check if user is an admin using the is_admin function
+      const { data: isAdmin, error: adminError } = await supabase
+        .rpc('is_admin', { user_id: user.id });
+
+      if (adminError || !isAdmin) {
+        setAlert({
+          type: 'error',
+          message: 'You do not have permission to access this page'
+        });
+        navigate('/');
+        return;
+      }
+
+      setIsAdmin(true);
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      setAlert({
+        type: 'error',
+        message: 'Error verifying admin status'
+      });
+      navigate('/');
+    }
+  };
 
   const fetchCategories = async () => {
     try {
-      const { data: categoriesData, error: categoriesError } = await supabase
+      const { data, error } = await supabase
         .from('interest_categories')
-        .select('*')
+        .select(`
+          id,
+          name,
+          display_order,
+          interests (
+            id,
+            name,
+            display_order
+          )
+        `)
         .order('display_order');
-      
-      if (categoriesError) throw categoriesError;
 
-      const { data: interestsData, error: interestsError } = await supabase
-        .from('interests')
-        .select('*')
-        .order('display_order');
-      
-      if (interestsError) throw interestsError;
-
-      const categoriesWithInterests = categoriesData.map(category => ({
-        ...category,
-        interests: interestsData.filter(interest => interest.category_id === category.id)
-      }));
-
-      setCategories(categoriesWithInterests);
+      if (error) throw error;
+      setCategories(data || []);
     } catch (error) {
       console.error('Error fetching categories:', error);
       setAlert({
@@ -97,88 +95,144 @@ const AdminInterests: React.FC = () => {
     }
   };
 
-  const handleSaveCategory = async (category: Partial<InterestCategory>) => {
+  const handleSaveCategory = async (category: InterestCategory) => {
     try {
-      if (editingCategory?.id) {
+      if (category.id) {
         // Update existing category
         const { error } = await supabase
           .from('interest_categories')
-          .update(category)
-          .eq('id', editingCategory.id);
-        
+          .update({
+            name: category.name,
+            display_order: category.display_order
+          })
+          .eq('id', category.id);
+
         if (error) throw error;
       } else {
         // Create new category
         const { error } = await supabase
           .from('interest_categories')
-          .insert([category]);
-        
+          .insert([{
+            name: category.name,
+            display_order: category.display_order
+          }]);
+
         if (error) throw error;
       }
 
+      // Refresh categories
+      await fetchCategories();
       setAlert({
         type: 'success',
-        message: `Category ${editingCategory?.id ? 'updated' : 'created'} successfully`
+        message: `Category ${category.id ? 'updated' : 'created'} successfully`
       });
-      setEditingCategory(null);
-      await fetchCategories();
     } catch (error) {
       console.error('Error saving category:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to save category'
+        message: `Failed to ${category.id ? 'update' : 'create'} category`
       });
     }
   };
 
-  const handleSaveInterest = async (interest: Partial<Interest>) => {
+  const handleSaveInterest = async (categoryId: string, interest: Interest) => {
     try {
-      if (editingInterest?.id) {
+      // First check if we're authenticated and an admin
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setAlert({
+          type: 'error',
+          message: 'You must be logged in to perform this action'
+        });
+        return;
+      }
+
+      // Log the current user and admin status
+      console.log('Current user:', user);
+      const { data: adminCheck, error: adminError } = await supabase
+        .from('admins')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      
+      console.log('Admin check:', { adminCheck, adminError });
+
+      if (interest.id) {
         // Update existing interest
         const { error } = await supabase
           .from('interests')
-          .update(interest)
-          .eq('id', editingInterest.id);
-        
-        if (error) throw error;
+          .update({
+            name: interest.name,
+            display_order: interest.display_order
+          })
+          .eq('id', interest.id);
+
+        if (error) {
+          console.error('Update error details:', error);
+          throw error;
+        }
       } else {
         // Create new interest
+        console.log('Creating new interest:', {
+          name: interest.name,
+          category_id: categoryId,
+          display_order: interest.display_order
+        });
+
         const { error } = await supabase
           .from('interests')
-          .insert([interest]);
-        
-        if (error) throw error;
+          .insert([{
+            name: interest.name,
+            category_id: categoryId,
+            display_order: interest.display_order
+          }]);
+
+        if (error) {
+          console.error('Insert error details:', error);
+          throw error;
+        }
       }
 
+      // Refresh categories
+      await fetchCategories();
       setAlert({
         type: 'success',
-        message: `Interest ${editingInterest?.id ? 'updated' : 'created'} successfully`
+        message: `Interest ${interest.id ? 'updated' : 'created'} successfully`
       });
       setEditingInterest(null);
-      await fetchCategories();
     } catch (error) {
       console.error('Error saving interest:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to save interest'
+        message: `Failed to ${interest.id ? 'update' : 'create'} interest: ${error.message}`
       });
     }
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
     try {
-      const { error } = await supabase
+      // First delete all interests in this category
+      const { error: interestsError } = await supabase
+        .from('interests')
+        .delete()
+        .eq('category_id', categoryId);
+
+      if (interestsError) throw interestsError;
+
+      // Then delete the category
+      const { error: categoryError } = await supabase
         .from('interest_categories')
         .delete()
         .eq('id', categoryId);
-      
-      if (error) throw error;
 
+      if (categoryError) throw categoryError;
+
+      // Refresh categories
+      await fetchCategories();
       setAlert({
         type: 'success',
         message: 'Category deleted successfully'
       });
-      await fetchCategories();
     } catch (error) {
       console.error('Error deleting category:', error);
       setAlert({
@@ -194,14 +248,15 @@ const AdminInterests: React.FC = () => {
         .from('interests')
         .delete()
         .eq('id', interestId);
-      
+
       if (error) throw error;
 
+      // Refresh categories
+      await fetchCategories();
       setAlert({
         type: 'success',
         message: 'Interest deleted successfully'
       });
-      await fetchCategories();
     } catch (error) {
       console.error('Error deleting interest:', error);
       setAlert({
@@ -210,23 +265,6 @@ const AdminInterests: React.FC = () => {
       });
     }
   };
-
-  if (isLoading || !isAdmin) {
-    return (
-      <Layout>
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-32 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
 
   return (
     <Layout>
@@ -278,29 +316,25 @@ const AdminInterests: React.FC = () => {
                   </Button>
                 </div>
               </div>
-
               <div className="p-6">
-                <div className="mb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-md font-medium text-gray-900">Interests</h4>
                   <Button
                     onClick={() => setEditingInterest({ category_id: category.id, name: '', description: '', display_order: category.interests.length })}
                     variant="outline"
                     size="sm"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
+                    <Plus className="h-4 w-4 mr-1" />
                     Add Interest
                   </Button>
                 </div>
-
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {category.interests.map((interest) => (
-                    <div
-                      key={interest.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
+                    <div key={interest.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                       <div>
-                        <h4 className="font-medium text-gray-900">{interest.name}</h4>
+                        <h5 className="text-sm font-medium text-gray-900">{interest.name}</h5>
                         {interest.description && (
-                          <p className="text-sm text-gray-600">{interest.description}</p>
+                          <p className="text-sm text-gray-600 mt-1">{interest.description}</p>
                         )}
                       </div>
                       <div className="flex space-x-2">
@@ -339,9 +373,11 @@ const AdminInterests: React.FC = () => {
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
                   handleSaveCategory({
+                    id: editingCategory.id,
                     name: formData.get('name') as string,
-                    description: formData.get('description') as string,
+                    description: editingCategory.description,
                     display_order: parseInt(formData.get('display_order') as string),
+                    interests: editingCategory.interests
                   });
                 }}>
                   <div className="space-y-4">
@@ -403,11 +439,12 @@ const AdminInterests: React.FC = () => {
                 <form onSubmit={(e) => {
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
-                  handleSaveInterest({
-                    category_id: editingInterest.category_id,
+                  handleSaveInterest(editingInterest.category_id, {
+                    id: editingInterest.id,
                     name: formData.get('name') as string,
                     description: formData.get('description') as string,
                     display_order: parseInt(formData.get('display_order') as string),
+                    category_id: editingInterest.category_id
                   });
                 }}>
                   <div className="space-y-4">

@@ -4,35 +4,11 @@ import Layout from '../components/Layout/Layout';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
-import { supabase, getCurrentUser } from '../lib/supabase';
-import { Users, Clock, Calendar, BarChart3, Settings, ChevronRight } from 'lucide-react';
-import { Line, Doughnut } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-);
+import { supabase } from '../lib/supabase';
+import { Users, Clock, Calendar, Settings, ChevronRight, CreditCard, Filter, Tag } from 'lucide-react';
+import { format, startOfYear, parseISO } from 'date-fns';
 
 const AdminDashboard: React.FC = () => {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalMembers: 0,
     activeMembers: 0,
@@ -43,131 +19,195 @@ const AdminDashboard: React.FC = () => {
     averageAttendance: 0,
   });
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
+  const [dateRange, setDateRange] = useState({
+    startDate: format(startOfYear(new Date()), 'yyyy-MM-dd'),
+    endDate: format(new Date(), 'yyyy-MM-dd')
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkAdminStatus = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError || !session) {
-          navigate('/login');
-          return;
-        }
-        
-        const { data: adminData } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .single();
-        
-        if (!adminData) {
-          navigate('/');
-          return;
-        }
-        
-        setIsAdmin(true);
-        await fetchDashboardData();
-      } catch (error) {
-        console.error('Error checking admin status:', error);
-        navigate('/');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    checkAdminStatus();
-  }, [navigate]);
+    fetchDashboardData();
+  }, [dateRange]);
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch member stats
+      const startDate = dateRange.startDate ? format(dateRange.startDate, 'yyyy-MM-dd') : format(startOfYear(new Date()), 'yyyy-MM-dd');
+      const endDate = dateRange.endDate ? format(dateRange.endDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+
+      console.log('Fetching data for date range:', { startDate, endDate });
+
+      // Fetch members
       const { data: members, error: membersError } = await supabase
         .from('members')
-        .select('status');
-      
-      if (membersError) throw membersError;
+        .select('*');
 
-      const memberStats = members?.reduce((acc, member) => ({
-        ...acc,
-        total: acc.total + 1,
-        active: member.status === 'active' ? acc.active + 1 : acc.active,
-        pending: member.status === 'pending' ? acc.pending + 1 : acc.pending,
-        expired: member.status === 'expired' ? acc.expired + 1 : acc.expired,
-      }), { total: 0, active: 0, pending: 0, expired: 0 });
+      if (membersError) throw membersError;
+      console.log('Fetched members:', members);
 
       // Fetch volunteer hours
-      const { data: hours, error: hoursError } = await supabase
+      const { data: volunteerHours, error: volunteerError } = await supabase
         .from('volunteer_hours')
-        .select('hours');
-      
-      if (hoursError) throw hoursError;
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate);
 
-      const totalHours = hours?.reduce((sum, record) => sum + record.hours, 0) || 0;
+      if (volunteerError) throw volunteerError;
+      console.log('Fetched volunteer hours:', volunteerHours);
 
-      // Fetch meeting stats
+      // Calculate total volunteer hours
+      const totalHours = volunteerHours?.reduce((sum, record) => {
+        const hours = typeof record.hours === 'string' ? parseFloat(record.hours) : record.hours;
+        return sum + (isNaN(hours) ? 0 : hours);
+      }, 0) || 0;
+      console.log('Calculated total hours:', totalHours);
+
+      // Fetch meetings
       const { data: meetings, error: meetingsError } = await supabase
         .from('meetings')
-        .select('id');
-      
-      if (meetingsError) throw meetingsError;
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate);
 
+      if (meetingsError) throw meetingsError;
+      console.log('Fetched meetings:', meetings);
+
+      // Fetch meeting attendance
       const { data: attendance, error: attendanceError } = await supabase
         .from('meeting_attendance')
-        .select('meeting_id');
-      
+        .select(`
+          *,
+          meetings (
+            date,
+            title
+          )
+        `)
+        .gte('meetings.date', startDate)
+        .lte('meetings.date', endDate);
+
       if (attendanceError) throw attendanceError;
+      console.log('Fetched attendance:', attendance);
 
-      const totalMeetings = meetings?.length || 0;
-      const averageAttendance = totalMeetings ? 
-        Math.round((attendance?.length || 0) / totalMeetings) : 0;
+      // Calculate total attendees
+      const totalAttendees = attendance?.length || 0;
+      const averageAttendance = meetings?.length ? totalAttendees / meetings.length : 0;
+      console.log('Calculated attendance stats:', { totalAttendees, averageAttendance });
 
+      // Calculate member stats
+      const totalMembers = members?.length || 0;
+      const activeMembers = members?.filter(m => m.status === 'active').length || 0;
+      const pendingMembers = members?.filter(m => m.status === 'pending').length || 0;
+      const expiredMembers = members?.filter(m => m.status === 'expired').length || 0;
+
+      console.log('Calculated member stats:', {
+        totalMembers,
+        activeMembers,
+        pendingMembers,
+        expiredMembers
+      });
+
+      // Set the stats
       setStats({
-        totalMembers: memberStats?.total || 0,
-        activeMembers: memberStats?.active || 0,
-        pendingMembers: memberStats?.pending || 0,
-        expiredMembers: memberStats?.expired || 0,
+        totalMembers,
+        activeMembers,
+        pendingMembers,
+        expiredMembers,
         totalVolunteerHours: totalHours,
-        totalMeetings,
-        averageAttendance,
+        totalMeetings: meetings?.length || 0,
+        averageAttendance: Math.round(averageAttendance * 10) / 10
+      });
+
+      console.log('Final stats set:', {
+        totalMembers,
+        activeMembers,
+        pendingMembers,
+        expiredMembers,
+        totalVolunteerHours: totalHours,
+        totalMeetings: meetings?.length || 0,
+        averageAttendance: Math.round(averageAttendance * 10) / 10
       });
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to load dashboard data'
+        message: `Failed to load dashboard data: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
     }
   };
 
-  if (isLoading || !isAdmin) {
-    return (
-      <Layout>
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-32 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[1, 2].map((i) => (
-                <div key={i} className="h-80 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
+  const handleDateRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setDateRange(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const resetToYTD = () => {
+    setDateRange({
+      startDate: format(startOfYear(new Date()), 'yyyy-MM-dd'),
+      endDate: format(new Date(), 'yyyy-MM-dd')
+    });
+  };
 
   return (
     <Layout>
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              className="flex items-center"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Date Range
+            </Button>
+            {showDatePicker && (
+              <div className="absolute top-24 right-8 bg-white p-4 rounded-lg shadow-lg border border-gray-200 z-10">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Start Date</label>
+                    <input
+                      type="date"
+                      name="startDate"
+                      value={dateRange.startDate}
+                      onChange={handleDateRangeChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">End Date</label>
+                    <input
+                      type="date"
+                      name="endDate"
+                      value={dateRange.endDate}
+                      onChange={handleDateRangeChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      variant="outline"
+                      onClick={resetToYTD}
+                      size="sm"
+                    >
+                      Reset to YTD
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={() => setShowDatePicker(false)}
+                      size="sm"
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         
         {alert && (
@@ -180,7 +220,7 @@ const AdminDashboard: React.FC = () => {
         )}
         
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="hover:shadow-lg transition-shadow">
             <div className="flex items-center p-6">
               <div className="p-3 bg-primary-100 rounded-full">
@@ -213,6 +253,9 @@ const AdminDashboard: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Volunteer Hours</p>
                 <p className="text-2xl font-semibold text-gray-900">{stats.totalVolunteerHours}</p>
+                <p className="text-xs text-gray-500">
+                  {format(parseISO(dateRange.startDate), 'MMM d')} - {format(parseISO(dateRange.endDate), 'MMM d, yyyy')}
+                </p>
               </div>
             </div>
           </Card>
@@ -225,6 +268,9 @@ const AdminDashboard: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Meetings</p>
                 <p className="text-2xl font-semibold text-gray-900">{stats.totalMeetings}</p>
+                <p className="text-xs text-gray-500">
+                  {format(parseISO(dateRange.startDate), 'MMM d')} - {format(parseISO(dateRange.endDate), 'MMM d, yyyy')}
+                </p>
               </div>
             </div>
           </Card>
@@ -232,122 +278,93 @@ const AdminDashboard: React.FC = () => {
         
         {/* Admin Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card 
+          <Card
             className="hover:shadow-lg transition-shadow cursor-pointer"
             onClick={() => navigate('/admin/interests')}
           >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-primary-100 rounded-full">
-                  <Settings className="h-6 w-6 text-primary-600" />
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Manage Interests</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Manage interest categories and options
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Manage Interests</h3>
-              <p className="text-gray-600">
-                Configure interest categories and options for members
-              </p>
+              <Tag className="h-8 w-8 text-primary-500" />
             </div>
           </Card>
 
-          <Card 
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/events')}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Manage Events</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Create and manage meetings and events
+                </p>
+              </div>
+              <Calendar className="h-8 w-8 text-primary-500" />
+            </div>
+          </Card>
+
+          <Card
             className="hover:shadow-lg transition-shadow cursor-pointer"
             onClick={() => navigate('/admin/volunteer-hours')}
           >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-primary-100 rounded-full">
-                  <Clock className="h-6 w-6 text-primary-600" />
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Manage Volunteer Hours</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Track and manage volunteer hours
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Volunteer Hours</h3>
-              <p className="text-gray-600">
-                View and manage volunteer hour submissions
-              </p>
+              <Clock className="h-8 w-8 text-primary-500" />
             </div>
           </Card>
 
-          <Card 
+          <Card
             className="hover:shadow-lg transition-shadow cursor-pointer"
             onClick={() => navigate('/admin/attendance')}
           >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-primary-100 rounded-full">
-                  <Users className="h-6 w-6 text-primary-600" />
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Manage Attendance</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Track meeting and event attendance
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Meeting Attendance</h3>
-              <p className="text-gray-600">
-                Track and manage meeting attendance records
-              </p>
+              <Calendar className="h-8 w-8 text-primary-500" />
             </div>
           </Card>
-        </div>
-        
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Membership Status</h3>
-            <div className="h-64">
-              <Doughnut 
-                data={{
-                  labels: ['Active', 'Pending', 'Expired'],
-                  datasets: [{
-                    data: [stats.activeMembers, stats.pendingMembers, stats.expiredMembers],
-                    backgroundColor: [
-                      'rgba(52, 211, 153, 0.8)',
-                      'rgba(251, 191, 36, 0.8)',
-                      'rgba(239, 68, 68, 0.8)',
-                    ],
-                    borderColor: [
-                      'rgb(52, 211, 153)',
-                      'rgb(251, 191, 36)',
-                      'rgb(239, 68, 68)',
-                    ],
-                    borderWidth: 1,
-                  }],
-                }}
-                options={{
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      position: 'bottom'
-                    }
-                  }
-                }}
-              />
+
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/members')}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Manage Members</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  View and manage member information
+                </p>
+              </div>
+              <Users className="h-8 w-8 text-primary-500" />
             </div>
           </Card>
-          
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Activity</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">New Member Registration</p>
-                  <p className="text-sm text-gray-600">John Smith joined as a new member</p>
-                </div>
-                <span className="text-sm text-gray-500">2 hours ago</span>
+
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/payments')}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Manage Payments</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Track and manage member payments
+                </p>
               </div>
-              
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">Volunteer Hours Logged</p>
-                  <p className="text-sm text-gray-600">Sarah Johnson logged 4 hours</p>
-                </div>
-                <span className="text-sm text-gray-500">Yesterday</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">Meeting Attendance</p>
-                  <p className="text-sm text-gray-600">15 members attended Monthly Meeting</p>
-                </div>
-                <span className="text-sm text-gray-500">2 days ago</span>
-              </div>
+              <CreditCard className="h-8 w-8 text-primary-500" />
             </div>
           </Card>
         </div>

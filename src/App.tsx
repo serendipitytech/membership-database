@@ -9,7 +9,11 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminInterests from './pages/Admin/AdminInterests';
 import AdminVolunteerHours from './pages/Admin/AdminVolunteerHours';
 import AdminMeetingAttendance from './pages/Admin/AdminMeetingAttendance';
+import AdminMembers from './pages/Admin/AdminMembers';
 import PaymentPage from './pages/PaymentPage';
+import AdminPayments from './pages/Admin/AdminPayments';
+import TestSupabase from './pages/TestSupabase';
+import AdminEvents from './pages/Admin/AdminEvents';
 
 function App() {
   return (
@@ -25,7 +29,11 @@ function App() {
         <Route path="/admin/interests" element={<AdminInterests />} />
         <Route path="/admin/volunteer-hours" element={<AdminVolunteerHours />} />
         <Route path="/admin/attendance" element={<AdminMeetingAttendance />} />
+        <Route path="/admin/members" element={<AdminMembers />} />
         <Route path="/payment" element={<PaymentPage />} />
+        <Route path="/admin/payments" element={<AdminPayments />} />
+        <Route path="/test-supabase" element={<TestSupabase />} />
+        <Route path="/admin/events" element={<AdminEvents />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

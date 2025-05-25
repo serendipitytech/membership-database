@@ -85,18 +85,28 @@ const VolunteerPage: React.FC = () => {
         throw new Error('Please enter a valid number of hours');
       }
       
+      console.log('Submitting volunteer hours:', {
+        member_id: userId,
+        date: formData.date,
+        hours: hoursValue,
+        description: formData.description,
+        category: formData.category
+      });
+
       const { record, error } = await logVolunteerHours({
         member_id: userId,
         date: formData.date,
         hours: hoursValue,
         description: formData.description,
-        category: formData.category,
-        created_at: new Date().toISOString(),
+        category: formData.category
       });
       
       if (error) {
+        console.error('Error from Supabase:', error);
         throw error;
       }
+      
+      console.log('Successfully saved volunteer hours:', record);
       
       setAlert({
         type: 'success',

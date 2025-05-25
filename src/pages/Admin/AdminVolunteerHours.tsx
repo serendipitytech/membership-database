@@ -1,133 +1,317 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout/Layout';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
-import { supabase, getCurrentUser } from '../../lib/supabase';
-import { Clock, Download, Search, Filter } from 'lucide-react';
+import SelectField from '../../components/Form/SelectField';
+import TextField from '../../components/Form/TextField';
+import { Search, Plus, Download } from 'lucide-react';
 import { format } from 'date-fns';
+import { supabase } from '../../lib/supabase';
 
-interface VolunteerHour {
+interface Member {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
+interface Event {
+  id: string;
+  title: string;
+  date: string;
+  description?: string;
+  location?: string;
+  time?: string;
+}
+
+interface VolunteerHours {
   id: string;
   member_id: string;
-  date: string;
+  event_id: string;
   hours: number;
-  description: string;
-  category: string;
-  created_at: string;
-  member: {
-    first_name: string;
-    last_name: string;
-    email: string;
-  };
+  date: string;
+  notes?: string;
 }
 
 const AdminVolunteerHours: React.FC = () => {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [volunteerHours, setVolunteerHours] = useState<VolunteerHour[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [volunteerHours, setVolunteerHours] = useState<VolunteerHours[]>([]);
+  const [selectedMember, setSelectedMember] = useState<string>('');
+  const [selectedEvent, setSelectedEvent] = useState<string>('');
+  const [hours, setHours] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [volunteerDate, setVolunteerDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
+  const [showNewEventForm, setShowNewEventForm] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    time: '',
+    location: '',
+    description: ''
+  });
 
   useEffect(() => {
-    const checkAdminStatus = async () => {
-      try {
-        const { user } = await getCurrentUser();
-        
-        if (!user) {
-          navigate('/login');
-          return;
-        }
-        
-        const { data: adminData } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (!adminData) {
-          navigate('/');
-          return;
-        }
-        
-        setIsAdmin(true);
-        await fetchVolunteerHours();
-      } catch (error) {
-        console.error('Error checking admin status:', error);
-        navigate('/');
-      } finally {
-        setIsLoading(false);
+    fetchMembers();
+    fetchEvents();
+    fetchVolunteerHours();
+  }, []);
+
+  const fetchMembers = async () => {
+    try {
+      console.log('=== FETCHING MEMBERS ===');
+      console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+      console.log('Supabase Anon Key exists:', !!import.meta.env.VITE_SUPABASE_ANON_KEY);
+      
+      const { data, error } = await supabase
+        .from('members')
+        .select('id, first_name, last_name, email')
+        .order('last_name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching members:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
       }
-    };
-    
-    checkAdminStatus();
-  }, [navigate]);
+
+      console.log('Fetched members:', data);
+      setMembers(data || []);
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load members'
+      });
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      console.log('=== FETCHING MEETINGS ===');
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching meetings:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+
+      console.log('Fetched meetings:', data);
+      setEvents(data || []);
+    } catch (error) {
+      console.error('Error fetching meetings:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load meetings'
+      });
+    }
+  };
 
   const fetchVolunteerHours = async () => {
     try {
+      console.log('=== FETCHING VOLUNTEER HOURS ===');
       const { data, error } = await supabase
         .from('volunteer_hours')
         .select(`
           *,
-          member:members(first_name, last_name, email)
+          members (
+            id,
+            first_name,
+            last_name,
+            email
+          ),
+          meetings (
+            id,
+            title,
+            date
+          )
         `)
         .order('date', { ascending: false });
-      
-      if (error) throw error;
-      
+
+      if (error) {
+        console.error('Error fetching volunteer hours:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+
+      console.log('Fetched volunteer hours:', data);
       setVolunteerHours(data || []);
+      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching volunteer hours:', error);
       setAlert({
         type: 'error',
         message: 'Failed to load volunteer hours'
       });
+      setIsLoading(false);
     }
   };
 
-  const handleExportCSV = () => {
-    const headers = ['Date', 'Member Name', 'Email', 'Hours', 'Category', 'Description'];
-    const csvData = volunteerHours.map(record => [
-      format(new Date(record.date), 'yyyy-MM-dd'),
-      `${record.member.first_name} ${record.member.last_name}`,
-      record.member.email,
-      record.hours,
-      record.category || 'N/A',
-      record.description
-    ]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember || !selectedEvent || !hours) {
+      setAlert({
+        type: 'error',
+        message: 'Please select a member, event, and enter hours'
+      });
+      return;
+    }
+
+    try {
+      console.log('=== SUBMITTING VOLUNTEER HOURS ===');
+      const volunteerData = {
+        member_id: selectedMember,
+        event_id: selectedEvent,
+        hours: parseFloat(hours),
+        date: volunteerDate,
+        notes
+      };
+      console.log('Submitting data:', volunteerData);
+
+      const { data, error } = await supabase
+        .from('volunteer_hours')
+        .insert([volunteerData])
+        .select();
+
+      if (error) {
+        console.error('Error from Supabase:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+
+      console.log('Successfully saved volunteer hours:', data);
+
+      // Refresh the volunteer hours list
+      await fetchVolunteerHours();
+
+      setAlert({
+        type: 'success',
+        message: 'Volunteer hours recorded successfully'
+      });
+
+      // Reset form
+      setSelectedMember('');
+      setSelectedEvent('');
+      setHours('');
+      setNotes('');
+      setVolunteerDate(format(new Date(), 'yyyy-MM-dd'));
+    } catch (error) {
+      console.error('Error recording volunteer hours:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to record volunteer hours'
+      });
+    }
+  };
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      console.log('Creating new meeting:', newEvent);
+      
+      const { data, error } = await supabase
+        .from('meetings')
+        .insert([{
+          title: newEvent.title,
+          date: newEvent.date,
+          time: newEvent.time,
+          location: newEvent.location,
+          description: newEvent.description
+        }])
+        .select();
+
+      if (error) {
+        console.error('Error creating meeting:', error);
+        throw error;
+      }
+
+      console.log('Successfully created meeting:', data);
+      
+      // Refresh events list
+      await fetchEvents();
+      
+      // Select the newly created event
+      if (data && data[0]) {
+        setSelectedEvent(data[0].id);
+      }
+      
+      // Reset form
+      setNewEvent({
+        title: '',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        time: '',
+        location: '',
+        description: ''
+      });
+      setShowNewEventForm(false);
+      
+      setAlert({
+        type: 'success',
+        message: 'Meeting created successfully'
+      });
+    } catch (error) {
+      console.error('Error creating meeting:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to create meeting'
+      });
+    }
+  };
+
+  const exportToCSV = () => {
+    const headers = ['Member', 'Event', 'Hours', 'Date', 'Notes'];
+    const csvData = volunteerHours.map(hours => {
+      const member = members.find(m => m.id === hours.member_id);
+      const event = events.find(e => e.id === hours.event_id);
+      return [
+        member ? `${member.first_name} ${member.last_name}` : 'Unknown',
+        event ? event.title : 'Unknown',
+        hours.hours.toString(),
+        format(new Date(hours.date), 'MM/dd/yyyy'),
+        hours.notes || ''
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
-      ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...csvData.map(row => row.join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `volunteer-hours-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.download = `volunteer_hours_${format(new Date(), 'yyyy-MM-dd')}.csv`;
     link.click();
   };
 
-  const filteredHours = volunteerHours.filter(record => {
-    const searchMatch = 
-      record.member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const categoryMatch = selectedCategory === 'all' || record.category === selectedCategory;
-    
-    return searchMatch && categoryMatch;
-  });
-
-  const totalHours = filteredHours.reduce((sum, record) => sum + record.hours, 0);
-  const uniqueVolunteers = new Set(filteredHours.map(record => record.member_id)).size;
-  const categories = Array.from(new Set(volunteerHours.map(record => record.category).filter(Boolean)));
-
-  if (isLoading || !isAdmin) {
+  if (isLoading) {
     return (
       <Layout>
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -149,7 +333,10 @@ const AdminVolunteerHours: React.FC = () => {
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Volunteer Hours</h1>
-          <Button onClick={handleExportCSV} variant="outline">
+          <Button
+            onClick={exportToCSV}
+            variant="outline"
+          >
             <Download className="h-5 w-5 mr-2" />
             Export CSV
           </Button>
@@ -164,125 +351,192 @@ const AdminVolunteerHours: React.FC = () => {
           />
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-primary-50">
-            <div className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-primary-600">Total Hours</p>
-                  <p className="text-3xl font-bold text-primary-900">{totalHours}</p>
-                </div>
-                <Clock className="h-8 w-8 text-primary-500" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="bg-primary-50">
-            <div className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-primary-600">Unique Volunteers</p>
-                  <p className="text-3xl font-bold text-primary-900">{uniqueVolunteers}</p>
-                </div>
-                <Clock className="h-8 w-8 text-primary-500" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="bg-primary-50">
-            <div className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-primary-600">Categories</p>
-                  <p className="text-3xl font-bold text-primary-900">{categories.length}</p>
-                </div>
-                <Clock className="h-8 w-8 text-primary-500" />
-              </div>
-            </div>
-          </Card>
-        </div>
-
         <Card className="mb-8">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search by name, email, or description..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                  />
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Record Volunteer Hours</h2>
+            <form onSubmit={handleSubmit} className="grid grid-cols-12 gap-4">
+              <div className="col-span-3">
+                <SelectField
+                  label="Member"
+                  value={selectedMember}
+                  onChange={(e) => setSelectedMember(e.target.value)}
+                  options={members.map(member => ({
+                    value: member.id,
+                    label: `${member.first_name} ${member.last_name}`
+                  }))}
+                  required
+                />
+              </div>
+              <div className="col-span-3">
+                <div className="flex items-end space-x-2">
+                  <div className="flex-grow">
+                    <SelectField
+                      label="Event"
+                      value={selectedEvent}
+                      onChange={(e) => setSelectedEvent(e.target.value)}
+                      options={events.map(event => ({
+                        value: event.id,
+                        label: event.title
+                      }))}
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowNewEventForm(!showNewEventForm)}
+                    className="mb-1"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Filter className="h-5 w-5 text-gray-400" />
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                >
-                  <option value="all">All Categories</option>
-                  {categories.map(category => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
+              <div className="col-span-2">
+                <TextField
+                  label="Hours"
+                  type="number"
+                  step="0.5"
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value)}
+                  required
+                />
               </div>
-            </div>
-          </div>
+              <div className="col-span-2">
+                <TextField
+                  label="Date"
+                  type="date"
+                  value={volunteerDate}
+                  onChange={(e) => setVolunteerDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="col-span-2">
+                <TextField
+                  label="Notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </div>
+              <div className="col-span-12 flex justify-end">
+                <Button type="submit" variant="primary">
+                  <Plus className="h-5 w-5 mr-2" />
+                  Record Hours
+                </Button>
+              </div>
+            </form>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Member
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Hours
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Category
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredHours.map((record) => (
-                  <tr key={record.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {format(new Date(record.date), 'MMM d, yyyy')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {record.member.first_name} {record.member.last_name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {record.member.email}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {record.hours}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-primary-100 text-primary-800">
-                        {record.category || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {record.description}
-                    </td>
+            {showNewEventForm && (
+              <div className="mt-6 p-4 border rounded-lg bg-gray-50">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Meeting</h3>
+                <form onSubmit={handleCreateEvent} className="grid grid-cols-12 gap-4">
+                  <div className="col-span-4">
+                    <TextField
+                      label="Title"
+                      value={newEvent.title}
+                      onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <TextField
+                      label="Date"
+                      type="date"
+                      value={newEvent.date}
+                      onChange={(e) => setNewEvent(prev => ({ ...prev, date: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <TextField
+                      label="Time"
+                      type="time"
+                      value={newEvent.time}
+                      onChange={(e) => setNewEvent(prev => ({ ...prev, time: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-span-4">
+                    <TextField
+                      label="Location"
+                      value={newEvent.location}
+                      onChange={(e) => setNewEvent(prev => ({ ...prev, location: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-span-12">
+                    <TextField
+                      label="Description"
+                      value={newEvent.description}
+                      onChange={(e) => setNewEvent(prev => ({ ...prev, description: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-span-12 flex justify-end space-x-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowNewEventForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" variant="primary">
+                      Create Meeting
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Volunteer Hours</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Member
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Event
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Hours
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Notes
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {volunteerHours.map((hours) => {
+                    const member = hours.members;
+                    const event = hours.meetings;
+                    return (
+                      <tr key={hours.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {member ? `${member.first_name} ${member.last_name}` : 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {event ? event.title : 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {hours.hours}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {format(new Date(hours.date), 'MMM d, yyyy')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {hours.notes}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </Card>
       </div>
