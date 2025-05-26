@@ -7,7 +7,7 @@ import Alert from '../../components/UI/Alert';
 import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
 import CheckboxGroup from '../../components/Form/CheckboxGroup';
-import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download } from 'lucide-react';
+import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 
@@ -73,11 +73,26 @@ const AdminMembers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
 
   const initializeInterestData = async () => {
     try {
-      // First, create some interest categories
+      // First check if we already have categories
+      const { data: existingCategories, error: checkError } = await supabase
+        .from('interest_categories')
+        .select('id')
+        .limit(1);
+
+      if (checkError) throw checkError;
+
+      // If we already have categories, don't initialize
+      if (existingCategories && existingCategories.length > 0) {
+        console.log('Interest categories already exist, skipping initialization');
+        return;
+      }
+
+      // Create categories only if none exist
       const { data: categories, error: categoriesError } = await supabase
         .from('interest_categories')
         .insert([
@@ -135,22 +150,47 @@ const AdminMembers: React.FC = () => {
   useEffect(() => {
     console.log('Component mounted, fetching data...');
     fetchMembers();
-    // Initialize interest data if tables are empty
-    initializeInterestData().then(() => {
-      fetchInterestCategories();
-    });
+    fetchInterestCategories();
   }, []);
 
   const fetchMembers = async () => {
     try {
+      setIsLoading(true);
       const { data: members, error } = await supabase
         .from('members')
         .select(`
           *,
-          member_interests:member_interests_view(interest_id, interest_name, category_name),
-          volunteer_hours:member_volunteer_hours_view(volunteer_hour_id, date, hours, description, category, meeting_title),
-          meeting_attendance:member_meeting_attendance_view(attendance_id, meeting_title, meeting_date),
-          payments(id, amount, date, status)
+          member_interests (
+            interest_id,
+            interest:interests (
+              id,
+              name,
+              category:interest_categories (
+                name
+              )
+            )
+          ),
+          volunteer_hours (
+            id,
+            date,
+            hours,
+            description,
+            category
+          ),
+          meeting_attendance (
+            id,
+            meeting:meetings (
+              id,
+              title,
+              date
+            )
+          ),
+          payments (
+            id,
+            amount,
+            date,
+            status
+          )
         `)
         .order('last_name', { ascending: true });
 
@@ -160,9 +200,9 @@ const AdminMembers: React.FC = () => {
       const transformedMembers = (members || []).map(member => ({
         ...member,
         interests: member.member_interests?.map(mi => ({
-          id: mi.interest_id,
-          name: mi.interest_name,
-          category: { name: mi.category_name }
+          id: mi.interest.id,
+          name: mi.interest.name,
+          category: { name: mi.interest.category.name }
         })) || [],
         volunteer_hours: member.volunteer_hours || [],
         meeting_attendance: member.meeting_attendance || [],
@@ -170,81 +210,163 @@ const AdminMembers: React.FC = () => {
       }));
 
       setMembers(transformedMembers);
-      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching members:', error);
       setAlert({
         type: 'error',
         message: 'Failed to load members. Please try again.'
       });
+    } finally {
       setIsLoading(false);
     }
   };
 
   const fetchInterestCategories = async () => {
     try {
-      console.log('Fetching interest categories...');
-      
-      // First check if we can access the database at all
-      const { data: schemaInfo, error: schemaError } = await supabase
-        .from('information_schema.tables')
-        .select('table_name, table_schema')
-        .eq('table_schema', 'public');
-
-      console.log('Database schema info:', {
-        error: schemaError,
-        data: schemaInfo
-      });
-
-      // Try querying with explicit schema
-      const { data: categories, error: categoriesError } = await supabase
-        .from('public.interest_categories')
-        .select('id, name')
+      const { data: categories, error } = await supabase
+        .from('interest_categories')
+        .select(`
+          id,
+          name,
+          interests (
+            id,
+            name
+          )
+        `)
         .order('name');
 
-      console.log('Categories query with explicit schema:', {
-        error: categoriesError,
-        data: categories,
-        query: 'SELECT id, name FROM public.interest_categories ORDER BY name'
-      });
-
-      // Try a raw query to see all tables
-      const { data: tables, error: tablesError } = await supabase
-        .rpc('get_tables');
-
-      console.log('All tables in database:', {
-        error: tablesError,
-        data: tables
-      });
-
-      // Combine the data
-      const combinedData = categories?.map(category => ({
-        ...category,
-        interests: [] // We'll add interests once we confirm categories work
-      })) || [];
-
-      console.log('Combined data:', combinedData);
+      if (error) throw error;
       
-      setInterestCategories(combinedData);
-      console.log('Interest categories state updated with:', combinedData);
+      // Filter out any duplicate interests
+      const uniqueCategories = categories?.map(category => ({
+        ...category,
+        interests: category.interests.filter((interest, index, self) =>
+          index === self.findIndex(i => i.id === interest.id)
+        )
+      })) || [];
+      
+      setInterestCategories(uniqueCategories);
     } catch (error) {
-      console.error('Error in fetchInterestCategories:', error);
+      console.error('Error fetching interest categories:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to load interest categories'
+        message: 'Failed to load interest categories. Please try again.'
       });
     }
+  };
+
+  const toggleMemberExpansion = (memberId: string) => {
+    setExpandedMembers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(memberId)) {
+        newSet.delete(memberId);
+      } else {
+        newSet.add(memberId);
+      }
+      return newSet;
+    });
+  };
+
+  const renderMemberCard = (member: Member) => {
+    const isExpanded = expandedMembers.has(member.id);
+    
+    return (
+      <Card key={member.id} className="mb-4">
+        <div className="p-4">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {member.first_name} {member.last_name}
+              </h3>
+              <p className="text-sm text-gray-600">{member.email}</p>
+              <p className="text-sm text-gray-600">{member.phone}</p>
+            </div>
+            <div className="flex space-x-2">
+              <Button
+                onClick={() => toggleMemberExpansion(member.id)}
+                variant="outline"
+                size="sm"
+              >
+                {isExpanded ? 'Show Less' : 'Show More'}
+              </Button>
+              <Button
+                onClick={() => handleEditMember(member)}
+                variant="outline"
+                size="sm"
+              >
+                Edit
+              </Button>
+              {!member.is_admin && (
+                <button
+                  onClick={() => handleDeleteMember(member.id)}
+                  className="text-red-600 hover:text-red-900"
+                  title="Delete member"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Expanded Content */}
+          {isExpanded && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Contact Information</h4>
+                  <p className="text-sm text-gray-600">
+                    {member.address}<br />
+                    {member.city}, {member.state} {member.zip}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Membership Details</h4>
+                  <p className="text-sm text-gray-600">
+                    Type: {member.membership_type}<br />
+                    Renewal Date: {format(new Date(member.renewal_date), 'MMM d, yyyy')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <h4 className="font-medium text-gray-700 mb-2">Interests</h4>
+                <div className="flex flex-wrap gap-2">
+                  {member.interests.map(interest => (
+                    <span key={interest.id} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
+                      {interest.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <h4 className="font-medium text-gray-700 mb-2">Recent Activity</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">
+                      Volunteer Hours: {member.volunteer_hours.length}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Meetings Attended: {member.meeting_attendance.length}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">
+                      Total Payments: {member.payments.length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+    );
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   };
-
-  const filteredMembers = members.filter(member => 
-    member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleEditMember = (member: Member) => {
     setSelectedMember(member);
@@ -345,16 +467,48 @@ const AdminMembers: React.FC = () => {
   };
 
   const handleDeleteMember = async (memberId: string) => {
-    if (!window.confirm('Are you sure you want to delete this member?')) return;
+    if (!window.confirm('Are you sure you want to delete this member? This action cannot be undone.')) {
+      return;
+    }
 
     try {
-      // Remove member from the local state
-      setMembers(prevMembers => prevMembers.filter(member => member.id !== memberId));
+      // First delete all related records
+      const { error: memberInterestsError } = await supabase
+        .from('member_interests')
+        .delete()
+        .eq('member_id', memberId);
+
+      if (memberInterestsError) throw memberInterestsError;
+
+      const { error: volunteerHoursError } = await supabase
+        .from('volunteer_hours')
+        .delete()
+        .eq('member_id', memberId);
+
+      if (volunteerHoursError) throw volunteerHoursError;
+
+      const { error: meetingAttendanceError } = await supabase
+        .from('meeting_attendance')
+        .delete()
+        .eq('member_id', memberId);
+
+      if (meetingAttendanceError) throw meetingAttendanceError;
+
+      // Finally delete the member
+      const { error: memberError } = await supabase
+        .from('members')
+        .delete()
+        .eq('id', memberId);
+
+      if (memberError) throw memberError;
 
       setAlert({
         type: 'success',
         message: 'Member deleted successfully'
       });
+
+      // Refresh the members list
+      fetchMembers();
     } catch (error) {
       console.error('Error deleting member:', error);
       setAlert({
@@ -573,43 +727,25 @@ const AdminMembers: React.FC = () => {
     <Layout>
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Manage Members</h1>
-          <div className="flex space-x-4">
+          <h1 className="text-3xl font-bold text-gray-900">Members</h1>
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search members..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+            </div>
             <Button
-              onClick={() => {
-                setSelectedMember({
-                  id: '',
-                  first_name: '',
-                  last_name: '',
-                  email: '',
-                  phone: '',
-                  address: '',
-                  city: '',
-                  state: '',
-                  zip: '',
-                  membership_type: 'individual',
-                  status: 'active',
-                  is_admin: false,
-                  created_at: new Date().toISOString(),
-                  renewal_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-                  interests: [],
-                  volunteer_hours: [],
-                  meeting_attendance: [],
-                  payments: []
-                });
-                setIsCreating(true);
-              }}
               variant="primary"
+              onClick={() => setIsCreating(true)}
+              className="flex items-center"
             >
               <Plus className="h-5 w-5 mr-2" />
-              Create Member
-            </Button>
-            <Button
-              onClick={exportToCSV}
-              variant="outline"
-            >
-              <Download className="h-5 w-5 mr-2" />
-              Export CSV
+              Add Member
             </Button>
           </div>
         </div>
@@ -623,151 +759,21 @@ const AdminMembers: React.FC = () => {
           />
         )}
 
-        <div className="mb-6">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
+        <div className="space-y-4">
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading members...</p>
             </div>
-            <input
-              type="text"
-              placeholder="Search members..."
-              value={searchTerm}
-              onChange={handleSearch}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          {filteredMembers.map((member) => (
-            <Card key={member.id} className="overflow-hidden">
-              <div className="p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {member.first_name} {member.last_name}
-                      {member.is_admin && (
-                        <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                          Admin
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-sm text-gray-500">{member.email}</p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      onClick={() => handleEditMember(member)}
-                      variant="outline"
-                      size="sm"
-                    >
-                      <Edit2 className="h-4 w-4 mr-2" />
-                      Edit
-                    </Button>
-                    <Button
-                      onClick={() => handleDeleteMember(member.id)}
-                      variant="danger"
-                      size="sm"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-500">Contact Info</h4>
-                    <dl className="mt-2 space-y-1">
-                      <div>
-                        <dt className="text-sm text-gray-500">Phone</dt>
-                        <dd className="text-sm text-gray-900">{member.phone}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-sm text-gray-500">Address</dt>
-                        <dd className="text-sm text-gray-900">
-                          {member.address}<br />
-                          {member.city}, {member.state} {member.zip}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-500">Membership</h4>
-                    <dl className="mt-2 space-y-1">
-                      <div>
-                        <dt className="text-sm text-gray-500">Type</dt>
-                        <dd className="text-sm text-gray-900 capitalize">{member.membership_type}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-sm text-gray-500">Status</dt>
-                        <dd className="text-sm text-gray-900 capitalize">{member.status}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-sm text-gray-500">Created</dt>
-                        <dd className="text-sm text-gray-900">
-                          {format(new Date(member.created_at), 'MMM d, yyyy')}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-sm text-gray-500">Renewal Date</dt>
-                        <dd className="text-sm text-gray-900">
-                          {format(new Date(member.renewal_date), 'MMM d, yyyy')}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-500">Activity</h4>
-                    <dl className="mt-2 space-y-1">
-                      <div>
-                        <dt className="text-sm text-gray-500">Volunteer Hours</dt>
-                        <dd className="text-sm text-gray-900">
-                          {member.volunteer_hours.reduce((sum, h) => sum + h.hours, 0)} total hours
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-sm text-gray-500">Meetings Attended</dt>
-                        <dd className="text-sm text-gray-900">
-                          {member.meeting_attendance.length} meetings
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-sm text-gray-500">Last Payment</dt>
-                        <dd className="text-sm text-gray-900">
-                          {member.payments.length > 0
-                            ? format(new Date(member.payments[0].date), 'MMM d, yyyy')
-                            : 'No payments'}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                </div>
-
-                <div className="mt-6 border-t border-gray-200 pt-6">
-                  <h4 className="text-sm font-medium text-gray-500 mb-4">Interests</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {member.interests && member.interests.length > 0 ? (
-                      member.interests.map((interest) => (
-                        <span
-                          key={interest.id}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800"
-                        >
-                          {interest.name}
-                          <span className="ml-1 text-primary-600">
-                            ({interest.category.name})
-                          </span>
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-gray-500">No interests selected</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
+          ) : (
+            members
+              .filter(member => 
+                member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                member.email.toLowerCase().includes(searchTerm.toLowerCase())
+              )
+              .map(renderMemberCard)
+          )}
         </div>
 
         {/* Create Member Modal */}
@@ -775,7 +781,7 @@ const AdminMembers: React.FC = () => {
           <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="fixed inset-0 bg-black bg-opacity-50"></div>
             <div className="relative min-h-screen flex items-center justify-center p-4">
-              <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl">
+              <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <div className="p-6">
                   <h2 className="text-xl font-semibold mb-4">Create New Member</h2>
                   <form onSubmit={handleCreateMember} className="space-y-6">
@@ -854,55 +860,47 @@ const AdminMembers: React.FC = () => {
 
                     <div className="border-t border-gray-200 pt-6">
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Interests</h3>
-                      <div className="space-y-4 max-h-60 overflow-y-auto">
-                        {interestCategories && interestCategories.length > 0 ? (
-                          interestCategories.map((category) => (
-                            <div key={category.id} className="mb-4">
-                              <h4 className="text-sm font-medium text-gray-700 mb-2">{category.name}</h4>
-                              <div className="space-y-2">
-                                {category.interests && category.interests.length > 0 ? (
-                                  category.interests.map((interest) => (
-                                    <div key={interest.id} className="flex items-center">
-                                      <input
-                                        type="checkbox"
-                                        id={`interest-${interest.id}`}
-                                        checked={selectedMember.interests.some(i => i.id === interest.id)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setSelectedMember({
-                                              ...selectedMember,
-                                              interests: [
-                                                ...selectedMember.interests,
-                                                {
-                                                  id: interest.id,
-                                                  name: interest.name,
-                                                  category: { name: category.name }
-                                                }
-                                              ]
-                                            });
-                                          } else {
-                                            setSelectedMember({
-                                              ...selectedMember,
-                                              interests: selectedMember.interests.filter(i => i.id !== interest.id)
-                                            });
-                                          }
-                                        }}
-                                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                                      />
-                                      <label htmlFor={`interest-${interest.id}`} className="ml-2 block text-sm text-gray-900">
-                                        {interest.name}
-                                      </label>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="text-sm text-gray-500">No interests in this category</p>
-                                )}
-                              </div>
+                      <div className="space-y-4 max-h-[300px] overflow-y-auto">
+                        {interestCategories.map((category) => (
+                          <div key={category.id} className="mb-4">
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">{category.name}</h4>
+                            <div className="space-y-2">
+                              {category.interests.map((interest) => (
+                                <div key={interest.id} className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    id={`interest-${interest.id}`}
+                                    checked={selectedMember.interests.some(i => i.id === interest.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedMember({
+                                          ...selectedMember,
+                                          interests: [
+                                            ...selectedMember.interests,
+                                            {
+                                              id: interest.id,
+                                              name: interest.name,
+                                              category: { name: category.name }
+                                            }
+                                          ]
+                                        });
+                                      } else {
+                                        setSelectedMember({
+                                          ...selectedMember,
+                                          interests: selectedMember.interests.filter(i => i.id !== interest.id)
+                                        });
+                                      }
+                                    }}
+                                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                                  />
+                                  <label htmlFor={`interest-${interest.id}`} className="ml-2 block text-sm text-gray-900">
+                                    {interest.name}
+                                  </label>
+                                </div>
+                              ))}
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-gray-500">No interest categories available</p>
-                        )}
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -930,10 +928,10 @@ const AdminMembers: React.FC = () => {
 
         {/* Edit Member Modal */}
         {isEditing && selectedMember && (
-          <div className="fixed inset-0 z-50">
+          <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="fixed inset-0 bg-black bg-opacity-50"></div>
-            <div className="fixed inset-0 flex items-center justify-center p-4">
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+            <div className="relative min-h-screen flex items-center justify-center p-4">
+              <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <div className="p-6">
                   <h2 className="text-xl font-semibold mb-4">Edit Member</h2>
                   <form onSubmit={handleSaveMember}>
@@ -1023,13 +1021,11 @@ const AdminMembers: React.FC = () => {
 
                     <div className="border-t border-gray-200 pt-6">
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Interests</h3>
-                      <div className="space-y-4">
-                        {console.log('Rendering interest categories:', interestCategories)}
+                      <div className="space-y-4 max-h-[300px] overflow-y-auto">
                         {interestCategories.map((category) => (
                           <div key={category.id} className="mb-4">
                             <h4 className="text-sm font-medium text-gray-700 mb-2">{category.name}</h4>
                             <div className="space-y-2">
-                              {console.log('Category interests:', category.interests)}
                               {category.interests.map((interest) => (
                                 <div key={interest.id} className="flex items-center">
                                   <input

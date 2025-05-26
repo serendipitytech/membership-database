@@ -156,7 +156,7 @@ const AdminMeetingAttendance: React.FC = () => {
             description
           )
         `)
-        .order('date', { ascending: false });
+        .order('meetings(date)', { ascending: false });
 
       if (error) {
         console.error('Error fetching attendance:', error);

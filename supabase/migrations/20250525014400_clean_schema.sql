@@ -1,11 +1,11 @@
 /*
-  # Fresh Database Setup for NW Democrats Membership System
+  # Clean Database Schema for NW Democrats Membership System
   
   This migration creates a complete database structure with:
   1. All necessary tables and relationships
   2. Row Level Security (RLS) enabled on all tables
   3. Clear, well-organized security policies
-  4. Initial data for testing
+  4. Initial interest categories and interests
 */
 
 -- Enable necessary extensions
@@ -44,6 +44,7 @@ CREATE TABLE members (
   zip text,
   membership_type text NOT NULL,
   status text NOT NULL DEFAULT 'pending',
+  is_admin boolean DEFAULT false,
   joined_date timestamptz DEFAULT now(),
   renewal_date timestamptz DEFAULT (now() + interval '1 year'),
   created_at timestamptz DEFAULT now(),
@@ -172,7 +173,11 @@ CREATE POLICY "Admins can manage interest categories"
   ON interest_categories
   FOR ALL
   TO authenticated
-  USING (auth.uid() IN (SELECT user_id FROM admins));
+  USING (EXISTS (
+    SELECT 1 FROM members 
+    WHERE members.email = auth.jwt() ->> 'email' 
+    AND members.is_admin = true
+  ));
 
 -- Interests Policies
 CREATE POLICY "Interests are readable by all"
@@ -185,7 +190,11 @@ CREATE POLICY "Admins can manage interests"
   ON interests
   FOR ALL
   TO authenticated
-  USING (auth.uid() IN (SELECT user_id FROM admins));
+  USING (EXISTS (
+    SELECT 1 FROM members 
+    WHERE members.email = auth.jwt() ->> 'email' 
+    AND members.is_admin = true
+  ));
 
 -- Member Interests Policies
 CREATE POLICY "Members can read their own interests"
@@ -263,53 +272,40 @@ CREATE POLICY "Members can record their own attendance"
     SELECT id FROM members WHERE email = auth.jwt() ->> 'email'
   ));
 
-CREATE POLICY "Admins can manage all attendance records"
+CREATE POLICY "Admins can manage all attendance"
   ON meeting_attendance
   FOR ALL
   TO authenticated
   USING (auth.uid() IN (SELECT user_id FROM admins));
 
--- Initial Data
+-- Insert initial interest categories and interests
+INSERT INTO interest_categories (name, description) VALUES
+  ('Outdoor Activities', 'Activities that take place outdoors'),
+  ('Arts & Crafts', 'Creative and artistic activities'),
+  ('Community Service', 'Volunteer and community engagement activities'),
+  ('Education', 'Learning and teaching activities');
 
--- Add initial admin user (replace with actual user ID)
-INSERT INTO admins (user_id)
-SELECT id 
-FROM auth.users 
-WHERE email = 'troy.shimkus@gmail.com'
-ON CONFLICT (user_id) DO NOTHING;
-
--- Sample Interest Categories
-INSERT INTO interest_categories (name, description, display_order)
-VALUES
-  ('Policy Areas', 'Policy areas you are interested in', 1),
-  ('Volunteer Opportunities', 'Ways you would like to help', 2),
-  ('Events & Activities', 'Events and activities you would like to participate in', 3);
-
--- Sample Interests
-INSERT INTO interests (category_id, name, description, display_order)
-VALUES
-  -- Policy Areas
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Healthcare', 'Healthcare policy and reform', 1),
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Education', 'Education policy and funding', 2),
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Environment', 'Environmental policy and climate change', 3),
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Economic Justice', 'Economic equality and opportunity', 4),
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Racial Justice', 'Racial equality and justice', 5),
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Housing', 'Housing policy and affordability', 6),
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Immigration', 'Immigration policy and reform', 7),
-  ((SELECT id FROM interest_categories WHERE name = 'Policy Areas'), 'Criminal Justice', 'Criminal justice reform', 8),
+-- Insert interests for each category
+WITH categories AS (
+  SELECT id, name FROM interest_categories
+)
+INSERT INTO interests (category_id, name, description) VALUES
+  -- Outdoor Activities
+  ((SELECT id FROM categories WHERE name = 'Outdoor Activities'), 'Hiking', 'Trail hiking and nature walks'),
+  ((SELECT id FROM categories WHERE name = 'Outdoor Activities'), 'Gardening', 'Community and home gardening'),
+  ((SELECT id FROM categories WHERE name = 'Outdoor Activities'), 'Bird Watching', 'Bird watching and nature observation'),
   
-  -- Volunteer Opportunities
-  ((SELECT id FROM interest_categories WHERE name = 'Volunteer Opportunities'), 'Phone Banking', 'Making calls to voters', 1),
-  ((SELECT id FROM interest_categories WHERE name = 'Volunteer Opportunities'), 'Canvassing', 'Door-to-door canvassing', 2),
-  ((SELECT id FROM interest_categories WHERE name = 'Volunteer Opportunities'), 'Event Planning', 'Helping plan and organize events', 3),
-  ((SELECT id FROM interest_categories WHERE name = 'Volunteer Opportunities'), 'Social Media', 'Assisting with social media outreach', 4),
-  ((SELECT id FROM interest_categories WHERE name = 'Volunteer Opportunities'), 'Fundraising', 'Helping with fundraising efforts', 5),
-  ((SELECT id FROM interest_categories WHERE name = 'Volunteer Opportunities'), 'Administrative', 'Providing administrative support', 6),
-  ((SELECT id FROM interest_categories WHERE name = 'Volunteer Opportunities'), 'Technical Support', 'Providing technical expertise', 7),
+  -- Arts & Crafts
+  ((SELECT id FROM categories WHERE name = 'Arts & Crafts'), 'Painting', 'Various forms of painting'),
+  ((SELECT id FROM categories WHERE name = 'Arts & Crafts'), 'Pottery', 'Ceramic and clay work'),
+  ((SELECT id FROM categories WHERE name = 'Arts & Crafts'), 'Woodworking', 'Wood crafting and carpentry'),
   
-  -- Events & Activities
-  ((SELECT id FROM interest_categories WHERE name = 'Events & Activities'), 'General Meetings', 'Regular membership meetings', 1),
-  ((SELECT id FROM interest_categories WHERE name = 'Events & Activities'), 'Candidate Forums', 'Forums to meet candidates', 2),
-  ((SELECT id FROM interest_categories WHERE name = 'Events & Activities'), 'Social Events', 'Social gatherings and networking', 3),
-  ((SELECT id FROM interest_categories WHERE name = 'Events & Activities'), 'Training Sessions', 'Skills training and education', 4),
-  ((SELECT id FROM interest_categories WHERE name = 'Events & Activities'), 'Community Service', 'Community service projects', 5); 
+  -- Community Service
+  ((SELECT id FROM categories WHERE name = 'Community Service'), 'Food Bank', 'Food bank volunteering'),
+  ((SELECT id FROM categories WHERE name = 'Community Service'), 'Animal Shelter', 'Animal shelter support'),
+  ((SELECT id FROM categories WHERE name = 'Community Service'), 'Senior Center', 'Senior center activities'),
+  
+  -- Education
+  ((SELECT id FROM categories WHERE name = 'Education'), 'Tutoring', 'Academic tutoring and mentoring'),
+  ((SELECT id FROM categories WHERE name = 'Education'), 'Workshop Leading', 'Leading educational workshops'),
+  ((SELECT id FROM categories WHERE name = 'Education'), 'Mentoring', 'Youth and adult mentoring'); 

@@ -46,6 +46,7 @@ export default {
       fontFamily: {
         sans: ['Open Sans', 'sans-serif'],
         heading: ['Montserrat', 'sans-serif'],
+        handwriting: ['Caveat', 'cursive'],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',
@@ -63,5 +64,7 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/forms'),
+  ],
 };

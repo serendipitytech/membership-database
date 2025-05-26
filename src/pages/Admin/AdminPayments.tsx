@@ -5,7 +5,7 @@ import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
-import { Search, Plus, Download } from 'lucide-react';
+import { Search, Plus, Download, Edit2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 
@@ -21,7 +21,7 @@ interface Payment {
   member_id: string;
   amount: number;
   date: string;
-  method: string;
+  payment_method: string;
   status: string;
   notes?: string;
 }
@@ -31,11 +31,12 @@ const AdminPayments: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedMember, setSelectedMember] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
-  const [method, setMethod] = useState<string>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [notes, setNotes] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
 
   useEffect(() => {
     fetchMembers();
@@ -105,7 +106,7 @@ const AdminPayments: React.FC = () => {
           member_id: selectedMember,
           amount: parseFloat(amount),
           date: paymentDate,
-          method,
+          payment_method: paymentMethod,
           status: 'completed',
           notes
         }])
@@ -124,7 +125,7 @@ const AdminPayments: React.FC = () => {
       // Reset form
       setSelectedMember('');
       setAmount('');
-      setMethod('cash');
+      setPaymentMethod('cash');
       setNotes('');
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
     } catch (error) {
@@ -132,6 +133,92 @@ const AdminPayments: React.FC = () => {
       setAlert({
         type: 'error',
         message: 'Failed to record payment'
+      });
+    }
+  };
+
+  const handleEdit = (payment: Payment) => {
+    setEditingPayment(payment);
+    setSelectedMember(payment.member_id);
+    setAmount(payment.amount.toString());
+    setPaymentMethod(payment.payment_method);
+    setNotes(payment.notes || '');
+    setPaymentDate(payment.date);
+  };
+
+  const handleDelete = async (paymentId: string) => {
+    if (!window.confirm('Are you sure you want to delete this payment? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .delete()
+        .eq('id', paymentId);
+
+      if (error) throw error;
+
+      // Refresh payments list
+      await fetchPayments();
+
+      setAlert({
+        type: 'success',
+        message: 'Payment deleted successfully'
+      });
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to delete payment'
+      });
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment || !selectedMember || !amount) {
+      setAlert({
+        type: 'error',
+        message: 'Please select a member and enter an amount'
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .update({
+          member_id: selectedMember,
+          amount: parseFloat(amount),
+          date: paymentDate,
+          payment_method: paymentMethod,
+          notes
+        })
+        .eq('id', editingPayment.id);
+
+      if (error) throw error;
+
+      // Refresh payments list
+      await fetchPayments();
+
+      setAlert({
+        type: 'success',
+        message: 'Payment updated successfully'
+      });
+
+      // Reset form and editing state
+      setEditingPayment(null);
+      setSelectedMember('');
+      setAmount('');
+      setPaymentMethod('cash');
+      setNotes('');
+      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+    } catch (error) {
+      console.error('Error updating payment:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to update payment'
       });
     }
   };
@@ -144,7 +231,7 @@ const AdminPayments: React.FC = () => {
         member ? `${member.first_name} ${member.last_name}` : 'Unknown',
         payment.amount.toString(),
         format(new Date(payment.date), 'MM/dd/yyyy'),
-        payment.method,
+        payment.payment_method,
         payment.status,
         payment.notes || ''
       ];
@@ -204,8 +291,10 @@ const AdminPayments: React.FC = () => {
 
         <Card className="mb-8">
           <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Record Payment</h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-12 gap-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              {editingPayment ? 'Edit Payment' : 'Record Payment'}
+            </h2>
+            <form onSubmit={editingPayment ? handleUpdate : handleSubmit} className="grid grid-cols-12 gap-4">
               <div className="col-span-3">
                 <SelectField
                   label="Member"
@@ -240,8 +329,8 @@ const AdminPayments: React.FC = () => {
               <div className="col-span-2">
                 <SelectField
                   label="Payment Method"
-                  value={method}
-                  onChange={(e) => setMethod(e.target.value)}
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
                   options={[
                     { value: 'cash', label: 'Cash' },
                     { value: 'check', label: 'Check' },
@@ -259,9 +348,25 @@ const AdminPayments: React.FC = () => {
                 />
               </div>
               <div className="col-span-12 flex justify-end">
+                {editingPayment && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingPayment(null);
+                      setSelectedMember('');
+                      setAmount('');
+                      setPaymentMethod('cash');
+                      setNotes('');
+                      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+                    }}
+                    className="mr-2"
+                  >
+                    Cancel
+                  </Button>
+                )}
                 <Button type="submit" variant="primary">
-                  <Plus className="h-5 w-5 mr-2" />
-                  Record Payment
+                  {editingPayment ? 'Update Payment' : 'Record Payment'}
                 </Button>
               </div>
             </form>
@@ -293,6 +398,9 @@ const AdminPayments: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Notes
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -309,14 +417,32 @@ const AdminPayments: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {format(new Date(payment.date), 'MMM d, yyyy')}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
-                          {payment.method.replace('_', ' ')}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {payment.payment_method}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {payment.status}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {payment.notes}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleEdit(payment)}
+                              className="text-primary-600 hover:text-primary-900"
+                              title="Edit payment"
+                            >
+                              <Edit2 className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(payment.id)}
+                              className="text-red-600 hover:text-red-900"
+                              title="Delete payment"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

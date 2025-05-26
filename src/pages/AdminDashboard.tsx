@@ -6,7 +6,6 @@ import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
 import { supabase } from '../lib/supabase';
 import { Users, Clock, Calendar, Settings, ChevronRight, CreditCard, Filter, Tag } from 'lucide-react';
-import { format, startOfYear, parseISO } from 'date-fns';
 
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({
@@ -19,10 +18,26 @@ const AdminDashboard: React.FC = () => {
     averageAttendance: 0,
   });
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
+  
+  // Initialize with current year start and end dates
+  const getCurrentYearStart = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-01-01`;
+  };
+
+  const getCurrentDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [dateRange, setDateRange] = useState({
-    startDate: format(startOfYear(new Date()), 'yyyy-MM-dd'),
-    endDate: format(new Date(), 'yyyy-MM-dd')
+    startDate: getCurrentYearStart(),
+    endDate: getCurrentDate()
   });
+  
   const [showDatePicker, setShowDatePicker] = useState(false);
   const navigate = useNavigate();
 
@@ -32,10 +47,7 @@ const AdminDashboard: React.FC = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const startDate = dateRange.startDate ? format(dateRange.startDate, 'yyyy-MM-dd') : format(startOfYear(new Date()), 'yyyy-MM-dd');
-      const endDate = dateRange.endDate ? format(dateRange.endDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-
-      console.log('Fetching data for date range:', { startDate, endDate });
+      console.log('Fetching data for date range:', dateRange);
 
       // Fetch members
       const { data: members, error: membersError } = await supabase
@@ -49,14 +61,14 @@ const AdminDashboard: React.FC = () => {
       const { data: volunteerHours, error: volunteerError } = await supabase
         .from('volunteer_hours')
         .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate);
+        .gte('date', dateRange.startDate)
+        .lte('date', dateRange.endDate);
 
       if (volunteerError) throw volunteerError;
       console.log('Fetched volunteer hours:', volunteerHours);
 
       // Calculate total volunteer hours
-      const totalHours = volunteerHours?.reduce((sum, record) => {
+      const totalHours = volunteerHours?.reduce((sum: number, record: any) => {
         const hours = typeof record.hours === 'string' ? parseFloat(record.hours) : record.hours;
         return sum + (isNaN(hours) ? 0 : hours);
       }, 0) || 0;
@@ -66,8 +78,8 @@ const AdminDashboard: React.FC = () => {
       const { data: meetings, error: meetingsError } = await supabase
         .from('meetings')
         .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate);
+        .gte('date', dateRange.startDate)
+        .lte('date', dateRange.endDate);
 
       if (meetingsError) throw meetingsError;
       console.log('Fetched meetings:', meetings);
@@ -82,8 +94,8 @@ const AdminDashboard: React.FC = () => {
             title
           )
         `)
-        .gte('meetings.date', startDate)
-        .lte('meetings.date', endDate);
+        .gte('meetings.date', dateRange.startDate)
+        .lte('meetings.date', dateRange.endDate);
 
       if (attendanceError) throw attendanceError;
       console.log('Fetched attendance:', attendance);
@@ -95,9 +107,9 @@ const AdminDashboard: React.FC = () => {
 
       // Calculate member stats
       const totalMembers = members?.length || 0;
-      const activeMembers = members?.filter(m => m.status === 'active').length || 0;
-      const pendingMembers = members?.filter(m => m.status === 'pending').length || 0;
-      const expiredMembers = members?.filter(m => m.status === 'expired').length || 0;
+      const activeMembers = members?.filter((m: any) => m.status === 'active').length || 0;
+      const pendingMembers = members?.filter((m: any) => m.status === 'pending').length || 0;
+      const expiredMembers = members?.filter((m: any) => m.status === 'expired').length || 0;
 
       console.log('Calculated member stats:', {
         totalMembers,
@@ -146,8 +158,8 @@ const AdminDashboard: React.FC = () => {
 
   const resetToYTD = () => {
     setDateRange({
-      startDate: format(startOfYear(new Date()), 'yyyy-MM-dd'),
-      endDate: format(new Date(), 'yyyy-MM-dd')
+      startDate: getCurrentYearStart(),
+      endDate: getCurrentDate()
     });
   };
 
@@ -254,7 +266,7 @@ const AdminDashboard: React.FC = () => {
                 <p className="text-sm font-medium text-gray-500">Volunteer Hours</p>
                 <p className="text-2xl font-semibold text-gray-900">{stats.totalVolunteerHours}</p>
                 <p className="text-xs text-gray-500">
-                  {format(parseISO(dateRange.startDate), 'MMM d')} - {format(parseISO(dateRange.endDate), 'MMM d, yyyy')}
+                  {dateRange.startDate} - {dateRange.endDate}
                 </p>
               </div>
             </div>
@@ -269,7 +281,7 @@ const AdminDashboard: React.FC = () => {
                 <p className="text-sm font-medium text-gray-500">Meetings</p>
                 <p className="text-2xl font-semibold text-gray-900">{stats.totalMeetings}</p>
                 <p className="text-xs text-gray-500">
-                  {format(parseISO(dateRange.startDate), 'MMM d')} - {format(parseISO(dateRange.endDate), 'MMM d, yyyy')}
+                  {dateRange.startDate} - {dateRange.endDate}
                 </p>
               </div>
             </div>

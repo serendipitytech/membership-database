@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout/Layout';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import { Users, Calendar, Award, Clock, Vote, FileText, HandHeart } from 'lucide-react';
+import { Users, Calendar, Award, Clock, Vote, FileText, Heart } from 'lucide-react';
 
 const HomePage: React.FC = () => {
   return (
@@ -60,7 +60,7 @@ const HomePage: React.FC = () => {
             <Card className="text-center hover:shadow-lg transition-shadow">
               <div className="flex flex-col items-center p-6">
                 <div className="p-3 bg-primary-100 rounded-full mb-4">
-                  <HandHeart className="h-8 w-8 text-primary-600" />
+                  <Heart className="h-8 w-8 text-primary-600" />
                 </div>
                 <h3 className="text-xl font-heading font-semibold mb-2">Community Action</h3>
                 <p className="text-gray-600">

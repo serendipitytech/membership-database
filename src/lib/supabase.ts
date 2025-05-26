@@ -2,20 +2,21 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
+// Create a client with the anonymous key for public operations
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    flowType: 'pkce',
     autoRefreshToken: true,
-    detectSessionInUrl: true,
     persistSession: true,
+    detectSessionInUrl: true,
     storageKey: 'nw_democrats_auth',
     storage: {
-      getItem: (key) => {
+      getItem: (key: string) => {
         try {
           const value = localStorage.getItem(key);
           return value ? JSON.parse(value) : null;
@@ -24,14 +25,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
           return null;
         }
       },
-      setItem: (key, value) => {
+      setItem: (key: string, value: any) => {
         try {
           localStorage.setItem(key, JSON.stringify(value));
         } catch (error) {
           console.error('Error writing to localStorage:', error);
         }
       },
-      removeItem: (key) => {
+      removeItem: (key: string) => {
         try {
           localStorage.removeItem(key);
         } catch (error) {
@@ -40,7 +41,54 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       },
     },
   },
+  global: {
+    headers: {
+      'apikey': supabaseAnonKey,
+      'Authorization': `Bearer ${supabaseAnonKey}`
+    }
+  }
 });
+
+// Create a client with the service role key for admin operations
+export const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    storageKey: 'nw_democrats_auth_admin',
+    storage: {
+      getItem: (key: string) => {
+        try {
+          const value = localStorage.getItem(key);
+          return value ? JSON.parse(value) : null;
+        } catch (error) {
+          console.error('Error reading from localStorage:', error);
+          return null;
+        }
+      },
+      setItem: (key: string, value: any) => {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch (error) {
+          console.error('Error writing to localStorage:', error);
+        }
+      },
+      removeItem: (key: string) => {
+        try {
+          localStorage.removeItem(key);
+        } catch (error) {
+          console.error('Error removing from localStorage:', error);
+        }
+      },
+    },
+  },
+  global: {
+    headers: {
+      'apikey': supabaseServiceKey,
+      'Authorization': `Bearer ${supabaseServiceKey}`
+    }
+  }
+}) : null;
 
 // Authentication helpers
 export const sendMagicLink = async (email: string) => {
@@ -116,79 +164,48 @@ export const registerMember = async (memberData: any) => {
 
 // Interest functions
 export const getInterestCategories = async () => {
-  // Mock data for development
-  const mockCategories = [
-    {
-      id: '1',
-      name: 'Policy Areas',
-      description: 'Policy areas you are interested in',
-      display_order: 1,
-      interests: [
-        {
-          id: '1',
-          name: 'Healthcare',
-          description: 'Healthcare policy and reform'
-        },
-        {
-          id: '2',
-          name: 'Education',
-          description: 'Education policy and funding'
-        },
-        {
-          id: '3',
-          name: 'Environment',
-          description: 'Environmental policy and climate change'
-        }
-      ]
-    },
-    {
-      id: '2',
-      name: 'Volunteer Opportunities',
-      description: 'Ways you would like to help',
-      display_order: 2,
-      interests: [
-        {
-          id: '4',
-          name: 'Phone Banking',
-          description: 'Making calls to voters'
-        },
-        {
-          id: '5',
-          name: 'Canvassing',
-          description: 'Door-to-door canvassing'
-        }
-      ]
-    },
-    {
-      id: '3',
-      name: 'Events & Activities',
-      description: 'Events and activities you would like to participate in',
-      display_order: 3,
-      interests: [
-        {
-          id: '6',
-          name: 'Town Halls',
-          description: 'Participating in town hall meetings'
-        },
-        {
-          id: '7',
-          name: 'Community Events',
-          description: 'Helping organize community events'
-        }
-      ]
-    }
-  ];
+  try {
+    // First fetch all categories
+    const { data: categories, error: categoriesError } = await supabase
+      .from('interest_categories')
+      .select('*')
+      .order('display_order');
 
-  return { categories: mockCategories, error: null };
+    if (categoriesError) throw categoriesError;
+
+    // Then fetch all interests
+    const { data: interests, error: interestsError } = await supabase
+      .from('interests')
+      .select('*')
+      .order('name');
+
+    if (interestsError) throw interestsError;
+
+    // Combine the data
+    const categoriesWithInterests = categories.map(category => ({
+      ...category,
+      interests: interests.filter(interest => interest.category_id === category.id)
+    }));
+
+    return { categories: categoriesWithInterests, error: null };
+  } catch (error) {
+    console.error('Error fetching interest categories:', error);
+    return { categories: [], error };
+  }
 };
 
 export const getMemberInterests = async (memberId: string) => {
   const { data, error } = await supabase
     .from('member_interests')
-    .select('interest_id')
+    .select(`
+      interest_id,
+      interests (
+        name
+      )
+    `)
     .eq('member_id', memberId);
   
-  return { interests: data?.map(i => i.interest_id) || [], error };
+  return { interests: data?.map(i => i.interests.name) || [], error };
 };
 
 export const updateMemberInterests = async (memberId: string, interestIds: string[]) => {

@@ -103,6 +103,7 @@ const AdminInterests: React.FC = () => {
           .from('interest_categories')
           .update({
             name: category.name,
+            description: category.description,
             display_order: category.display_order
           })
           .eq('id', category.id);
@@ -114,6 +115,7 @@ const AdminInterests: React.FC = () => {
           .from('interest_categories')
           .insert([{
             name: category.name,
+            description: category.description,
             display_order: category.display_order
           }]);
 
@@ -126,6 +128,7 @@ const AdminInterests: React.FC = () => {
         type: 'success',
         message: `Category ${category.id ? 'updated' : 'created'} successfully`
       });
+      setEditingCategory(null);
     } catch (error) {
       console.error('Error saving category:', error);
       setAlert({
@@ -147,15 +150,17 @@ const AdminInterests: React.FC = () => {
         return;
       }
 
-      // Log the current user and admin status
-      console.log('Current user:', user);
-      const { data: adminCheck, error: adminError } = await supabase
-        .from('admins')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-      
-      console.log('Admin check:', { adminCheck, adminError });
+      // Check if user is an admin using the is_admin function
+      const { data: isAdmin, error: adminError } = await supabase
+        .rpc('is_admin', { user_id: user.id });
+
+      if (adminError || !isAdmin) {
+        setAlert({
+          type: 'error',
+          message: 'You do not have permission to perform this action'
+        });
+        return;
+      }
 
       if (interest.id) {
         // Update existing interest
@@ -163,6 +168,7 @@ const AdminInterests: React.FC = () => {
           .from('interests')
           .update({
             name: interest.name,
+            description: interest.description,
             display_order: interest.display_order
           })
           .eq('id', interest.id);
@@ -176,6 +182,7 @@ const AdminInterests: React.FC = () => {
         console.log('Creating new interest:', {
           name: interest.name,
           category_id: categoryId,
+          description: interest.description,
           display_order: interest.display_order
         });
 
@@ -184,6 +191,7 @@ const AdminInterests: React.FC = () => {
           .insert([{
             name: interest.name,
             category_id: categoryId,
+            description: interest.description,
             display_order: interest.display_order
           }]);
 
@@ -200,7 +208,7 @@ const AdminInterests: React.FC = () => {
         message: `Interest ${interest.id ? 'updated' : 'created'} successfully`
       });
       setEditingInterest(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving interest:', error);
       setAlert({
         type: 'error',
@@ -300,20 +308,20 @@ const AdminInterests: React.FC = () => {
                   )}
                 </div>
                 <div className="flex space-x-2">
-                  <Button
+                  <button
                     onClick={() => setEditingCategory(category)}
-                    variant="outline"
-                    size="sm"
+                    className="text-primary-600 hover:text-primary-900"
+                    title="Edit category"
                   >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  <Button
+                    <Edit2 className="h-5 w-5" />
+                  </button>
+                  <button
                     onClick={() => handleDeleteCategory(category.id)}
-                    variant="danger"
-                    size="sm"
+                    className="text-red-600 hover:text-red-900"
+                    title="Delete category"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Trash2 className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
               <div className="p-6">
@@ -338,20 +346,20 @@ const AdminInterests: React.FC = () => {
                         )}
                       </div>
                       <div className="flex space-x-2">
-                        <Button
+                        <button
                           onClick={() => setEditingInterest(interest)}
-                          variant="outline"
-                          size="sm"
+                          className="text-primary-600 hover:text-primary-900"
+                          title="Edit interest"
                         >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
+                          <Edit2 className="h-5 w-5" />
+                        </button>
+                        <button
                           onClick={() => handleDeleteInterest(interest.id)}
-                          variant="danger"
-                          size="sm"
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete interest"
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          <Trash2 className="h-5 w-5" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -375,9 +383,9 @@ const AdminInterests: React.FC = () => {
                   handleSaveCategory({
                     id: editingCategory.id,
                     name: formData.get('name') as string,
-                    description: editingCategory.description,
-                    display_order: parseInt(formData.get('display_order') as string),
-                    interests: editingCategory.interests
+                    description: formData.get('description') as string,
+                    display_order: parseInt(formData.get('display_order') as string) || 0,
+                    interests: editingCategory.interests || []
                   });
                 }}>
                   <div className="space-y-4">
@@ -443,7 +451,7 @@ const AdminInterests: React.FC = () => {
                     id: editingInterest.id,
                     name: formData.get('name') as string,
                     description: formData.get('description') as string,
-                    display_order: parseInt(formData.get('display_order') as string),
+                    display_order: parseInt(formData.get('display_order') as string) || 0,
                     category_id: editingInterest.category_id
                   });
                 }}>
