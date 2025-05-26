@@ -24,6 +24,7 @@ interface Payment {
   payment_method: string;
   status: string;
   notes?: string;
+  is_recurring: boolean;
 }
 
 const AdminPayments: React.FC = () => {
@@ -34,6 +35,7 @@ const AdminPayments: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [notes, setNotes] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [isRecurring, setIsRecurring] = useState<boolean>(false);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
@@ -100,7 +102,23 @@ const AdminPayments: React.FC = () => {
     }
 
     try {
-      const { data, error } = await supabase
+      // Calculate expiration date based on payment date
+      const paymentDateObj = new Date(paymentDate);
+      const paymentMonth = paymentDateObj.getMonth() + 1; // JavaScript months are 0-based
+      let expirationYear;
+
+      // If payment is made after October 1st, membership is valid for current and next year
+      if (paymentMonth >= 10) {
+        expirationYear = paymentDateObj.getFullYear() + 1;
+      } else {
+        expirationYear = paymentDateObj.getFullYear();
+      }
+
+      // Set expiration date to December 31st of the appropriate year
+      const expirationDate = new Date(expirationYear, 11, 31).toISOString();
+
+      // Start a transaction to update both payment and member status
+      const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .insert([{
           member_id: selectedMember,
@@ -108,18 +126,30 @@ const AdminPayments: React.FC = () => {
           date: paymentDate,
           payment_method: paymentMethod,
           status: 'completed',
-          notes
+          notes,
+          is_recurring: isRecurring
         }])
         .select();
 
-      if (error) throw error;
+      if (paymentError) throw paymentError;
+
+      // Update member status and expiration date
+      const { error: memberError } = await supabase
+        .from('members')
+        .update({
+          status: 'active',
+          renewal_date: expirationDate
+        })
+        .eq('id', selectedMember);
+
+      if (memberError) throw memberError;
 
       // Refresh payments list
       await fetchPayments();
 
       setAlert({
         type: 'success',
-        message: 'Payment recorded successfully'
+        message: `Payment recorded and membership activated successfully${isRecurring ? ' (Recurring)' : ''}`
       });
 
       // Reset form
@@ -128,6 +158,7 @@ const AdminPayments: React.FC = () => {
       setPaymentMethod('cash');
       setNotes('');
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+      setIsRecurring(false);
     } catch (error) {
       console.error('Error recording payment:', error);
       setAlert({
@@ -144,6 +175,7 @@ const AdminPayments: React.FC = () => {
     setPaymentMethod(payment.payment_method);
     setNotes(payment.notes || '');
     setPaymentDate(payment.date);
+    setIsRecurring(payment.is_recurring);
   };
 
   const handleDelete = async (paymentId: string) => {
@@ -214,6 +246,7 @@ const AdminPayments: React.FC = () => {
       setPaymentMethod('cash');
       setNotes('');
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+      setIsRecurring(editingPayment.is_recurring);
     } catch (error) {
       console.error('Error updating payment:', error);
       setAlert({
@@ -224,7 +257,7 @@ const AdminPayments: React.FC = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Member', 'Amount', 'Date', 'Method', 'Status', 'Notes'];
+    const headers = ['Member', 'Amount', 'Date', 'Method', 'Status', 'Recurring', 'Notes'];
     const csvData = payments.map(payment => {
       const member = members.find(m => m.id === payment.member_id);
       return [
@@ -233,6 +266,7 @@ const AdminPayments: React.FC = () => {
         format(new Date(payment.date), 'MM/dd/yyyy'),
         payment.payment_method,
         payment.status,
+        payment.is_recurring ? 'Yes' : 'No',
         payment.notes || ''
       ];
     });
@@ -347,6 +381,20 @@ const AdminPayments: React.FC = () => {
                   onChange={(e) => setNotes(e.target.value)}
                 />
               </div>
+              <div className="col-span-12">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="is_recurring"
+                    checked={isRecurring}
+                    onChange={(e) => setIsRecurring(e.target.checked)}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="is_recurring" className="ml-2 block text-sm text-gray-700">
+                    This is a recurring payment
+                  </label>
+                </div>
+              </div>
               <div className="col-span-12 flex justify-end">
                 {editingPayment && (
                   <Button
@@ -359,6 +407,7 @@ const AdminPayments: React.FC = () => {
                       setPaymentMethod('cash');
                       setNotes('');
                       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+                      setIsRecurring(false);
                     }}
                     className="mr-2"
                   >
@@ -396,6 +445,9 @@ const AdminPayments: React.FC = () => {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Recurring
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Notes
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -422,6 +474,9 @@ const AdminPayments: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {payment.status}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {payment.is_recurring ? 'Yes' : 'No'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {payment.notes}

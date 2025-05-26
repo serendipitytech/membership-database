@@ -85,21 +85,13 @@ const PaymentPage: React.FC = () => {
   }, [memberId, navigate]);
 
   const handleActBluePayment = () => {
-    // In a real application, this would redirect to ActBlue with the correct parameters
-    // For now, we'll just simulate completion
-    
-    // Typically you would use:
-    // window.location.href = `https://secure.actblue.com/donate/your-org?amount=${membershipFee}`;
+    // Redirect to ActBlue with the correct parameters
+    window.location.href = `https://secure.actblue.com/donate/nwclub-sustainer?amount=${membershipFee}`;
     
     setAlert({
       type: 'info',
       message: 'Redirecting to ActBlue for payment processing...'
     });
-    
-    // Simulate redirect delay
-    setTimeout(() => {
-      navigate('/payment/success');
-    }, 2000);
   };
 
   if (isLoading) {

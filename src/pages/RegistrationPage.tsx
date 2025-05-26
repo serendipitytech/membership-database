@@ -242,6 +242,33 @@ const RegistrationPage: React.FC = () => {
         />
       </div>
       
+      <div className="border-t border-gray-200 pt-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Membership Type</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SelectField
+            id="membership_type"
+            label="Select Membership Type"
+            value={formData.membership_type}
+            onChange={handleChange}
+            required
+            options={[
+              { value: '', label: 'Select membership type' },
+              { value: 'individual', label: 'General Membership ($25/year)' },
+              { value: 'student', label: 'Student Membership ($10/year)' }
+            ]}
+          />
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-medium text-gray-900 mb-2">Membership Benefits</h4>
+            <ul className="text-sm text-gray-600 space-y-2">
+              <li>• Access to member-only events and meetings</li>
+              <li>• Voting rights in club elections</li>
+              <li>• Regular updates on local Democratic activities</li>
+              <li>• Opportunities to volunteer and make a difference</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      
       <TextField
         id="address"
         label="Street Address"

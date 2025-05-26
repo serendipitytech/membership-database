@@ -9,10 +9,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create a client with the anonymous key for public operations
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true
+  }
+});
 
 // Create a client with the service role key for admin operations
-export const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
+export const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true
+  }
+}) : null;
 
 // Authentication helpers
 export const sendMagicLink = async (email: string) => {
@@ -21,17 +33,6 @@ export const sendMagicLink = async (email: string) => {
     options: {
       emailRedirectTo: `${window.location.origin}/account`,
       shouldCreateUser: true,
-    },
-  });
-  
-  return { data, error };
-};
-
-export const signInWithEmail = async (email: string) => {
-  const { data, error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: window.location.origin
     },
   });
   
