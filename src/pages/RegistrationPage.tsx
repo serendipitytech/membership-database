@@ -8,6 +8,7 @@ import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
 import Card from '../components/UI/Card';
 import { getInterestCategories, registerMember, updateMemberInterests } from '../lib/supabase';
+import { getPickListValues, PICK_LIST_CATEGORIES } from '../lib/pickLists';
 
 interface FormData {
   first_name: string;
@@ -71,6 +72,9 @@ const RegistrationPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [step, setStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [membershipTypes, setMembershipTypes] = useState<Array<{value: string, label: string}>>([]);
+  const [shirtSizes, setShirtSizes] = useState<Array<{value: string, label: string}>>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -85,7 +89,41 @@ const RegistrationPage: React.FC = () => {
     };
     
     fetchInterests();
+    loadMembershipTypes();
+    loadShirtSizes();
   }, []);
+
+  const loadMembershipTypes = async () => {
+    try {
+      const values = await getPickListValues(PICK_LIST_CATEGORIES.MEMBERSHIP_TYPES);
+      setMembershipTypes(values.map(value => ({
+        value: value.value,
+        label: formatDisplayName(value.value)
+      })));
+    } catch (error) {
+      console.error('Error loading membership types:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load membership types'
+      });
+    }
+  };
+
+  const loadShirtSizes = async () => {
+    try {
+      const values = await getPickListValues(PICK_LIST_CATEGORIES.TSHIRT_SIZES);
+      setShirtSizes(values.map(value => ({
+        value: value.value,
+        label: formatDisplayName(value.value)
+      })));
+    } catch (error) {
+      console.error('Error loading shirt sizes:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load shirt sizes'
+      });
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -232,12 +270,7 @@ const RegistrationPage: React.FC = () => {
           onChange={handleChange}
           options={[
             { value: '', label: 'Select size' },
-            { value: 'S', label: 'Small' },
-            { value: 'M', label: 'Medium' },
-            { value: 'L', label: 'Large' },
-            { value: 'XL', label: 'X-Large' },
-            { value: '2XL', label: '2X-Large' },
-            { value: '3XL', label: '3X-Large' }
+            ...shirtSizes
           ]}
         />
       </div>
@@ -253,8 +286,7 @@ const RegistrationPage: React.FC = () => {
             required
             options={[
               { value: '', label: 'Select membership type' },
-              { value: 'individual', label: 'General Membership ($25/year)' },
-              { value: 'student', label: 'Student Membership ($10/year)' }
+              ...membershipTypes
             ]}
           />
           <div className="bg-gray-50 p-4 rounded-lg">
@@ -572,6 +604,14 @@ const RegistrationPage: React.FC = () => {
       </div>
     </Layout>
   );
+};
+
+// Helper function to format display names
+const formatDisplayName = (name: string): string => {
+  return name
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 };
 
 export default RegistrationPage;

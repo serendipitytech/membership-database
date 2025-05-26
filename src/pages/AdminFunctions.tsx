@@ -225,9 +225,17 @@ const AdminFunctions: React.FC = () => {
       });
       
       handleCloseDialog();
-      fetchCategories();
-      if (selectedCategory) {
-        fetchValues(selectedCategory);
+      
+      // Store the current selected category
+      const currentCategory = selectedCategory;
+      
+      // Fetch categories and values
+      await fetchCategories();
+      
+      // Restore the selected category
+      setSelectedCategory(currentCategory);
+      if (currentCategory) {
+        fetchValues(currentCategory);
       }
     } catch (error) {
       console.error(`Error ${editingItem ? 'updating' : 'creating'} ${dialogType}:`, error);

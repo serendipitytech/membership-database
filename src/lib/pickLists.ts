@@ -58,7 +58,7 @@ export function clearPickListCache(categoryName?: string) {
 
 // Common pick list categories
 export const PICK_LIST_CATEGORIES = {
-  MEETING_TYPES: 'meeting_types',
+  EVENT_TYPES: 'event_types',
   MEMBERSHIP_TYPES: 'membership_types',
   MEMBER_STATUSES: 'member_statuses',
   PAYMENT_STATUSES: 'payment_statuses',

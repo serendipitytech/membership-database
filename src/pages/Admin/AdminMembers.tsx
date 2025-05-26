@@ -10,6 +10,7 @@ import CheckboxGroup from '../../components/Form/CheckboxGroup';
 import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 
 interface Member {
   id: string;
@@ -74,6 +75,7 @@ const AdminMembers: React.FC = () => {
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
+  const [membershipTypes, setMembershipTypes] = useState<Array<{value: string, label: string}>>([]);
   const navigate = useNavigate();
 
   const initializeInterestData = async () => {
@@ -151,6 +153,8 @@ const AdminMembers: React.FC = () => {
     console.log('Component mounted, fetching data...');
     fetchMembers();
     fetchInterestCategories();
+    checkAdminStatus();
+    loadMembershipTypes();
   }, []);
 
   const fetchMembers = async () => {
@@ -702,6 +706,59 @@ const AdminMembers: React.FC = () => {
     link.click();
   };
 
+  const loadMembershipTypes = async () => {
+    try {
+      const types = await getPickListValues(PICK_LIST_CATEGORIES.MEMBERSHIP_TYPES);
+      setMembershipTypes(types.map(type => ({
+        value: type.value,
+        label: formatDisplayName(type.value)
+      })));
+    } catch (error) {
+      console.error('Error loading membership types:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load membership types'
+      });
+    }
+  };
+
+  const checkAdminStatus = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
+      // Check if user is an admin using the is_admin function
+      const { data: isAdmin, error: adminError } = await supabase
+        .rpc('is_admin', { user_id: user.id });
+
+      if (adminError || !isAdmin) {
+        setAlert({
+          type: 'error',
+          message: 'You do not have permission to access this page'
+        });
+        navigate('/');
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      setAlert({
+        type: 'error',
+        message: 'Error verifying admin status'
+      });
+      navigate('/');
+    }
+  };
+
+  const formatDisplayName = (name: string): string => {
+    return name
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -840,12 +897,7 @@ const AdminMembers: React.FC = () => {
                         label="Membership Type"
                         value={selectedMember.membership_type}
                         onChange={(e) => setSelectedMember({...selectedMember, membership_type: e.target.value})}
-                        options={[
-                          { value: 'individual', label: 'Individual' },
-                          { value: 'family', label: 'Family' },
-                          { value: 'student', label: 'Student' },
-                          { value: 'sustaining', label: 'Sustaining' }
-                        ]}
+                        options={membershipTypes}
                         required
                       />
                       <div className="flex items-center">
@@ -990,12 +1042,7 @@ const AdminMembers: React.FC = () => {
                         label="Membership Type"
                         value={selectedMember.membership_type}
                         onChange={(e) => setSelectedMember({...selectedMember, membership_type: e.target.value})}
-                        options={[
-                          { value: 'individual', label: 'Individual' },
-                          { value: 'family', label: 'Family' },
-                          { value: 'student', label: 'Student' },
-                          { value: 'sustaining', label: 'Sustaining' }
-                        ]}
+                        options={membershipTypes}
                         required
                       />
                       <SelectField

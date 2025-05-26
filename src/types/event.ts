@@ -34,20 +34,44 @@ export interface EventWithAttendance extends Event {
   }>;
 }
 
-// These will be populated from the pick list system
-export let EVENT_TYPES: Record<string, string> = {};
-export let EVENT_TYPE_LABELS: Record<string, string> = {};
-export let EVENT_TYPE_COLORS: Record<string, { bg: string; text: string }> = {};
+// Initialize with default values
+export const EVENT_TYPES: Record<string, string> = {
+  GENERAL: 'general',
+  BOARD: 'board',
+  COMMITTEE: 'committee',
+  SPECIAL: 'special'
+};
+
+export const EVENT_TYPE_LABELS: Record<string, string> = {
+  [EVENT_TYPES.GENERAL]: 'General Event',
+  [EVENT_TYPES.BOARD]: 'Board Meeting',
+  [EVENT_TYPES.COMMITTEE]: 'Committee Meeting',
+  [EVENT_TYPES.SPECIAL]: 'Special Event'
+};
+
+export const EVENT_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
+  [EVENT_TYPES.GENERAL]: { bg: 'bg-blue-100', text: 'text-blue-800' },
+  [EVENT_TYPES.BOARD]: { bg: 'bg-purple-100', text: 'text-purple-800' },
+  [EVENT_TYPES.COMMITTEE]: { bg: 'bg-green-100', text: 'text-green-800' },
+  [EVENT_TYPES.SPECIAL]: { bg: 'bg-yellow-100', text: 'text-yellow-800' }
+};
 
 // Function to update event types from pick list values
 export const updateEventTypes = (values: PickListValue[]) => {
-  EVENT_TYPES = {};
-  EVENT_TYPE_LABELS = {};
-  EVENT_TYPE_COLORS = {};
+  // Clear existing values
+  Object.keys(EVENT_TYPES).forEach(key => delete EVENT_TYPES[key]);
+  Object.keys(EVENT_TYPE_LABELS).forEach(key => delete EVENT_TYPE_LABELS[key]);
+  Object.keys(EVENT_TYPE_COLORS).forEach(key => delete EVENT_TYPE_COLORS[key]);
 
+  // Add new values
   values.forEach((value) => {
-    EVENT_TYPES[value.value] = value.value;
-    EVENT_TYPE_LABELS[value.value] = value.description || value.value;
+    EVENT_TYPES[value.value.toUpperCase()] = value.value;
+    // Use the value itself for the label, formatted for display
+    const formattedLabel = value.value
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    EVENT_TYPE_LABELS[value.value] = formattedLabel;
     
     // Assign colors based on value
     switch (value.value) {

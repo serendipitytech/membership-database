@@ -8,6 +8,7 @@ import TextField from '../../components/Form/TextField';
 import { Search, Plus, Download, Edit2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 
 interface Member {
   id: string;
@@ -32,7 +33,8 @@ const AdminPayments: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedMember, setSelectedMember] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<string>('');
+  const [paymentMethods, setPaymentMethods] = useState<Array<{value: string, label: string}>>([]);
   const [notes, setNotes] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [isRecurring, setIsRecurring] = useState<boolean>(false);
@@ -43,6 +45,7 @@ const AdminPayments: React.FC = () => {
   useEffect(() => {
     fetchMembers();
     fetchPayments();
+    loadPaymentMethods();
   }, []);
 
   const fetchMembers = async () => {
@@ -88,6 +91,22 @@ const AdminPayments: React.FC = () => {
         message: 'Failed to load payments'
       });
       setIsLoading(false);
+    }
+  };
+
+  const loadPaymentMethods = async () => {
+    try {
+      const values = await getPickListValues(PICK_LIST_CATEGORIES.PAYMENT_METHODS);
+      setPaymentMethods(values.map(value => ({
+        value: value.value,
+        label: formatDisplayName(value.value)
+      })));
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load payment methods'
+      });
     }
   };
 
@@ -155,7 +174,7 @@ const AdminPayments: React.FC = () => {
       // Reset form
       setSelectedMember('');
       setAmount('');
-      setPaymentMethod('cash');
+      setPaymentMethod('');
       setNotes('');
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
       setIsRecurring(false);
@@ -243,7 +262,7 @@ const AdminPayments: React.FC = () => {
       setEditingPayment(null);
       setSelectedMember('');
       setAmount('');
-      setPaymentMethod('cash');
+      setPaymentMethod('');
       setNotes('');
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
       setIsRecurring(editingPayment.is_recurring);
@@ -281,6 +300,14 @@ const AdminPayments: React.FC = () => {
     link.href = URL.createObjectURL(blob);
     link.download = `payments_${format(new Date(), 'yyyy-MM-dd')}.csv`;
     link.click();
+  };
+
+  // Helper function to format display names
+  const formatDisplayName = (name: string): string => {
+    return name
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   if (isLoading) {
@@ -366,10 +393,8 @@ const AdminPayments: React.FC = () => {
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   options={[
-                    { value: 'cash', label: 'Cash' },
-                    { value: 'check', label: 'Check' },
-                    { value: 'actblue', label: 'ActBlue' },
-                    { value: 'other', label: 'Other' }
+                    { value: '', label: 'Select payment method' },
+                    ...paymentMethods
                   ]}
                   required
                 />
@@ -404,7 +429,7 @@ const AdminPayments: React.FC = () => {
                       setEditingPayment(null);
                       setSelectedMember('');
                       setAmount('');
-                      setPaymentMethod('cash');
+                      setPaymentMethod('');
                       setNotes('');
                       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
                       setIsRecurring(false);

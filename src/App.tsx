@@ -15,6 +15,7 @@ import AdminPayments from './pages/Admin/AdminPayments';
 import TestSupabase from './pages/TestSupabase';
 import AdminEvents from './pages/Admin/AdminEvents';
 import AdminFunctions from './pages/AdminFunctions';
+import AdminAttendance from './pages/Admin/AdminAttendance';
 
 function App() {
   return (
@@ -29,7 +30,7 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/interests" element={<AdminInterests />} />
         <Route path="/admin/volunteer-hours" element={<AdminVolunteerHours />} />
-        <Route path="/admin/attendance" element={<AdminMeetingAttendance />} />
+        <Route path="/admin/attendance" element={<AdminAttendance />} />
         <Route path="/admin/members" element={<AdminMembers />} />
         <Route path="/payment" element={<PaymentPage />} />
         <Route path="/admin/payments" element={<AdminPayments />} />

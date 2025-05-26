@@ -33,3 +33,6 @@ dist/
 .DS_Store
 *.log
 docker/volume/
+
+# Ignore Supabase auto-generated migration files
+supabase/migrations/*.sql

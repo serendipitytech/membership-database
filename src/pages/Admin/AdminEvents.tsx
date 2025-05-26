@@ -8,38 +8,100 @@ import SelectField from '../../components/Form/SelectField';
 import { Plus, Trash2, Edit2, Calendar, Clock, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
-import { Meeting, MeetingType, MEETING_TYPES, MEETING_TYPE_LABELS, MEETING_TYPE_COLORS, updateMeetingTypes } from '../../types/meeting';
+import { Event, EventType, EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_TYPE_COLORS, updateEventTypes } from '../../types/event';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 
 const AdminEvents: React.FC = () => {
-  const [events, setEvents] = useState<Meeting[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<Meeting | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState('12:00');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState<MeetingType>('');
+  const [type, setType] = useState<EventType>('');
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchEvents();
-    loadMeetingTypes();
+    loadEventTypes();
   }, []);
 
-  const loadMeetingTypes = async () => {
+  const loadEventTypes = async () => {
     try {
-      const values = await getPickListValues(PICK_LIST_CATEGORIES.MEETING_TYPES);
-      updateMeetingTypes(values);
-      if (values.length > 0) {
-        setType(values[0].value);
+      // First, ensure the event_types category exists
+      const { data: categoryData, error: categoryError } = await supabase
+        .from('pick_list_categories')
+        .select('id')
+        .eq('name', PICK_LIST_CATEGORIES.EVENT_TYPES)
+        .single();
+
+      let categoryId;
+      if (categoryError && categoryError.code === 'PGRST116') {
+        // Category doesn't exist, create it
+        const { data: newCategory, error: createError } = await supabase
+          .from('pick_list_categories')
+          .insert([{
+            name: PICK_LIST_CATEGORIES.EVENT_TYPES,
+            description: 'Types of events',
+            display_order: 1
+          }])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        categoryId = newCategory.id;
+      } else if (categoryError) {
+        throw categoryError;
+      } else {
+        categoryId = categoryData.id;
+      }
+
+      // Now get the values
+      const { data: values, error: valuesError } = await supabase
+        .from('pick_list_values')
+        .select('*')
+        .eq('category_id', categoryId)
+        .eq('is_active', true)
+        .order('display_order');
+
+      if (valuesError) throw valuesError;
+
+      // If no values exist, create some default ones
+      if (!values || values.length === 0) {
+        const defaultTypes = [
+          { value: 'general', description: 'General Event', display_order: 1 },
+          { value: 'board', description: 'Board Meeting', display_order: 2 },
+          { value: 'committee', description: 'Committee Meeting', display_order: 3 },
+          { value: 'special', description: 'Special Event', display_order: 4 }
+        ];
+
+        const { data: newValues, error: insertError } = await supabase
+          .from('pick_list_values')
+          .insert(defaultTypes.map(type => ({
+            ...type,
+            category_id: categoryId,
+            is_active: true
+          })))
+          .select();
+
+        if (insertError) throw insertError;
+        updateEventTypes(newValues || []);
+        if (newValues && newValues.length > 0) {
+          setType(newValues[0].value);
+        }
+      } else {
+        updateEventTypes(values);
+        if (values.length > 0) {
+          setType(values[0].value);
+        }
       }
     } catch (error) {
-      console.error('Error loading meeting types:', error);
+      console.error('Error loading event types:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to load meeting types'
+        message: 'Failed to load event types'
       });
     }
   };
@@ -47,7 +109,7 @@ const AdminEvents: React.FC = () => {
   const fetchEvents = async () => {
     try {
       const { data, error } = await supabase
-        .from('meetings')
+        .from('events')
         .select('*')
         .order('date', { ascending: false });
 
@@ -75,41 +137,31 @@ const AdminEvents: React.FC = () => {
     }
 
     try {
+      // Ensure we're using the exact date string from the input
+      const eventData = {
+        title,
+        date,
+        time,
+        location,
+        description,
+        type: type || EVENT_TYPES.GENERAL // Default to GENERAL if not specified
+      };
+
       if (selectedEvent) {
         // Update existing event
         const { error } = await supabase
-          .from('meetings')
-          .update({
-            title,
-            date,
-            time,
-            location,
-            description,
-            type: type || MEETING_TYPES.GENERAL // Default to GENERAL if not specified
-          })
+          .from('events')
+          .update(eventData)
           .eq('id', selectedEvent.id);
 
-        if (error) {
-          console.error('Error updating event:', error);
-          throw error;
-        }
+        if (error) throw error;
       } else {
         // Create new event
         const { error } = await supabase
-          .from('meetings')
-          .insert([{
-            title,
-            date,
-            time,
-            location,
-            description,
-            type: type || MEETING_TYPES.GENERAL // Default to GENERAL if not specified
-          }]);
+          .from('events')
+          .insert([eventData]);
 
-        if (error) {
-          console.error('Error creating event:', error);
-          throw error;
-        }
+        if (error) throw error;
       }
 
       // Refresh events list
@@ -145,15 +197,15 @@ const AdminEvents: React.FC = () => {
     try {
       // Delete associated attendance records first
       const { error: attendanceError } = await supabase
-        .from('meeting_attendance')
+        .from('event_attendance')
         .delete()
-        .eq('meeting_id', eventId);
+        .eq('event_id', eventId);
 
       if (attendanceError) throw attendanceError;
 
       // Delete the event
       const { error: eventError } = await supabase
-        .from('meetings')
+        .from('events')
         .delete()
         .eq('id', eventId);
 
@@ -175,9 +227,10 @@ const AdminEvents: React.FC = () => {
     }
   };
 
-  const handleEdit = (event: Meeting) => {
+  const handleEdit = (event: Event) => {
     setSelectedEvent(event);
     setTitle(event.title);
+    // Ensure we're using the exact date from the database
     setDate(event.date);
     setTime(event.time);
     setLocation(event.location || '');
@@ -265,8 +318,8 @@ const AdminEvents: React.FC = () => {
                     id="type"
                     label="Event Type"
                     value={type}
-                    onChange={(e) => setType(e.target.value as MeetingType)}
-                    options={Object.entries(MEETING_TYPE_LABELS).map(([value, label]) => ({
+                    onChange={(e) => setType(e.target.value as EventType)}
+                    options={Object.entries(EVENT_TYPE_LABELS).map(([value, label]) => ({
                       value,
                       label
                     }))}
@@ -366,9 +419,9 @@ const AdminEvents: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          MEETING_TYPE_COLORS[event.type]?.bg || 'bg-gray-100'
-                        } ${MEETING_TYPE_COLORS[event.type]?.text || 'text-gray-800'}`}>
-                          {MEETING_TYPE_LABELS[event.type] || event.type}
+                          EVENT_TYPE_COLORS[event.type]?.bg || 'bg-gray-100'
+                        } ${EVENT_TYPE_COLORS[event.type]?.text || 'text-gray-800'}`}>
+                          {EVENT_TYPE_LABELS[event.type] || event.type}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
