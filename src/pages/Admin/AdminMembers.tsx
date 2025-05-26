@@ -683,15 +683,11 @@ const AdminMembers: React.FC = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Membership Type', 'Status', 'Created Date', 'Renewal Date'];
+    const headers = ['First Name', 'Last Name', 'Email'];
     const csvData = members.map(member => [
-      `${member.first_name} ${member.last_name}`,
-      member.email,
-      member.phone,
-      member.membership_type,
-      member.status,
-      format(new Date(member.created_at), 'MM/dd/yyyy'),
-      format(new Date(member.renewal_date), 'MM/dd/yyyy')
+      member.first_name,
+      member.last_name,
+      member.email
     ]);
 
     const csvContent = [
@@ -702,7 +698,7 @@ const AdminMembers: React.FC = () => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `members_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.download = `members_export_${format(new Date(), 'yyyy-MM-dd')}.csv`;
     link.click();
   };
 
@@ -739,6 +735,14 @@ const AdminMembers: React.FC = () => {
               />
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
             </div>
+            <Button
+              variant="secondary"
+              onClick={exportToCSV}
+              className="flex items-center"
+            >
+              <Download className="h-5 w-5 mr-2" />
+              Export CSV
+            </Button>
             <Button
               variant="primary"
               onClick={() => setIsCreating(true)}

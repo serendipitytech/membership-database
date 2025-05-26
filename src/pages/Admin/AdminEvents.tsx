@@ -8,26 +8,17 @@ import SelectField from '../../components/Form/SelectField';
 import { Plus, Trash2, Edit2, Calendar, Clock, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
-
-interface Event {
-  id: string;
-  title: string;
-  date: string;
-  time: string;
-  location?: string;
-  description?: string;
-  type: string;
-}
+import { Meeting, MeetingType, MEETING_TYPES, MEETING_TYPE_LABELS, MEETING_TYPE_COLORS } from '../../types/meeting';
 
 const AdminEvents: React.FC = () => {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [events, setEvents] = useState<Meeting[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<Meeting | null>(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState('12:00');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState<string>('general');
+  const [type, setType] = useState<MeetingType>(MEETING_TYPES.GENERAL);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -76,7 +67,7 @@ const AdminEvents: React.FC = () => {
             time,
             location,
             description,
-            type: type || 'general' // Default to 'general' if not specified
+            type: type || MEETING_TYPES.GENERAL // Default to GENERAL if not specified
           })
           .eq('id', selectedEvent.id);
 
@@ -94,7 +85,7 @@ const AdminEvents: React.FC = () => {
             time,
             location,
             description,
-            type: type || 'general' // Default to 'general' if not specified
+            type: type || MEETING_TYPES.GENERAL // Default to GENERAL if not specified
           }]);
 
         if (error) {
@@ -113,7 +104,7 @@ const AdminEvents: React.FC = () => {
       setTime('12:00');
       setLocation('');
       setDescription('');
-      setType('general');
+      setType(MEETING_TYPES.GENERAL);
 
       setAlert({
         type: 'success',
@@ -166,7 +157,7 @@ const AdminEvents: React.FC = () => {
     }
   };
 
-  const handleEdit = (event: Event) => {
+  const handleEdit = (event: Meeting) => {
     setSelectedEvent(event);
     setTitle(event.title);
     setDate(event.date);
@@ -255,12 +246,11 @@ const AdminEvents: React.FC = () => {
                     id="type"
                     label="Event Type"
                     value={type}
-                    onChange={(e) => setType(e.target.value)}
-                    options={[
-                      { value: 'general', label: 'General Meeting' },
-                      { value: 'committee', label: 'Committee Meeting' },
-                      { value: 'special', label: 'Special Event' }
-                    ]}
+                    onChange={(e) => setType(e.target.value as MeetingType)}
+                    options={Object.entries(MEETING_TYPE_LABELS).map(([value, label]) => ({
+                      value,
+                      label
+                    }))}
                     required
                   />
                 </div>
@@ -287,7 +277,7 @@ const AdminEvents: React.FC = () => {
                       setTime('12:00');
                       setLocation('');
                       setDescription('');
-                      setType('general');
+                      setType(MEETING_TYPES.GENERAL);
                     }}
                     variant="outline"
                   >
@@ -357,13 +347,9 @@ const AdminEvents: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          event.type === 'general' ? 'bg-blue-100 text-blue-800' : 
-                          event.type === 'committee' ? 'bg-purple-100 text-purple-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {event.type === 'general' ? 'General Meeting' : 
-                           event.type === 'committee' ? 'Committee Meeting' :
-                           'Special Event'}
+                          MEETING_TYPE_COLORS[event.type].bg
+                        } ${MEETING_TYPE_COLORS[event.type].text}`}>
+                          {MEETING_TYPE_LABELS[event.type]}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

@@ -4,9 +4,11 @@ import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import TextField from '../../components/Form/TextField';
+import SelectField from '../../components/Form/SelectField';
 import { Search, Plus, Download, X, Users, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { Meeting, MeetingWithAttendance, MeetingType, MEETING_TYPES, MEETING_TYPE_LABELS, MEETING_TYPE_COLORS } from '../../types/meeting';
 
 interface Member {
   id: string;
@@ -43,16 +45,17 @@ interface MeetingAttendance {
 
 const AdminMeetingAttendance: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [meetings, setMeetings] = useState<MeetingWithAttendance[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [meetingSearchTerm, setMeetingSearchTerm] = useState('');
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
-  const [meetingDate, setMeetingDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
-  const [meetingTime, setMeetingTime] = useState<string>('12:00');
-  const [meetingTitle, setMeetingTitle] = useState<string>('');
-  const [meetingLocation, setMeetingLocation] = useState<string>('');
-  const [meetingDescription, setMeetingDescription] = useState<string>('');
+  const [selectedMeeting, setSelectedMeeting] = useState<MeetingWithAttendance | null>(null);
+  const [meetingDate, setMeetingDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [meetingTime, setMeetingTime] = useState('12:00');
+  const [meetingTitle, setMeetingTitle] = useState('');
+  const [meetingLocation, setMeetingLocation] = useState('');
+  const [meetingDescription, setMeetingDescription] = useState('');
+  const [meetingType, setMeetingType] = useState<MeetingType>(MEETING_TYPES.GENERAL);
   const [attendingMembers, setAttendingMembers] = useState<Member[]>([]);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -229,7 +232,7 @@ const AdminMeetingAttendance: React.FC = () => {
     (meeting.location && meeting.location.toLowerCase().includes(meetingSearchTerm.toLowerCase()))
   );
 
-  const handleMeetingSelect = (meeting: Meeting) => {
+  const handleMeetingSelect = (meeting: MeetingWithAttendance) => {
     setSelectedMeeting(meeting);
     setMeetingTitle(meeting.title);
     setMeetingDate(meeting.date);
@@ -296,7 +299,7 @@ const AdminMeetingAttendance: React.FC = () => {
             time: meetingTime,
             location: meetingLocation,
             description: meetingDescription,
-            type: 'general' // Default to general meeting type
+            type: meetingType
           })
           .eq('id', selectedMeeting.id)
           .select()
@@ -314,7 +317,7 @@ const AdminMeetingAttendance: React.FC = () => {
             time: meetingTime,
             location: meetingLocation,
             description: meetingDescription,
-            type: 'general' // Default to general meeting type
+            type: meetingType
           }])
           .select()
           .single();
@@ -581,49 +584,17 @@ const AdminMeetingAttendance: React.FC = () => {
             </div>
 
             <div className="mb-6">
-              <div className="relative" ref={dropdownRef}>
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                  placeholder="Search member by name or email"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setShowDropdown(true);
-                  }}
-                  onKeyDown={handleSearchKeyDown}
-                  onFocus={() => setShowDropdown(true)}
-                />
-                {showDropdown && searchTerm && filteredMembers.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
-                    {filteredMembers.map((member, index) => (
-                      <div
-                        key={member.id}
-                        className={`cursor-pointer select-none relative py-2 pl-3 pr-9 ${
-                          index === highlightedIndex ? 'bg-primary-50' : 'hover:bg-primary-50'
-                        }`}
-                        onClick={() => handleMemberSelect(member)}
-                      >
-                        <div className="flex items-center">
-                          <span className="ml-3 block truncate">
-                            {member.first_name} {member.last_name}
-                          </span>
-                          <span className="ml-2 text-gray-500 text-sm">
-                            ({member.email})
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-gray-500">
-                Type member name or email to search, then click or press Enter to add
-              </p>
+              <SelectField
+                id="type"
+                label="Meeting Type"
+                value={meetingType}
+                onChange={(e) => setMeetingType(e.target.value as MeetingType)}
+                options={Object.entries(MEETING_TYPE_LABELS).map(([value, label]) => ({
+                  value,
+                  label
+                }))}
+                required
+              />
             </div>
 
             <div className="mb-6">

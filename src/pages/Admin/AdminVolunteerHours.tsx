@@ -8,6 +8,7 @@ import TextField from '../../components/Form/TextField';
 import { Search, Download, Edit2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { Meeting, MeetingWithAttendance, MeetingType, MEETING_TYPES, MEETING_TYPE_LABELS, MEETING_TYPE_COLORS } from '../../types/meeting';
 
 interface Member {
   id: string;
@@ -16,40 +17,32 @@ interface Member {
   email: string;
 }
 
-interface Event {
-  id: string;
-  title: string;
-  date: string;
-  description?: string;
-  location?: string;
-  time?: string;
-}
-
 interface VolunteerHours {
   id: string;
   member_id: string;
-  event_id: string;
+  meeting_id: string;
   hours: number;
-  date: string;
-  notes?: string;
+  description: string;
+  created_at: string;
+  member?: Member;
+  meeting?: Meeting;
 }
 
 const AdminVolunteerHours: React.FC = () => {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
   const [volunteerHours, setVolunteerHours] = useState<VolunteerHours[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [selectedHours, setSelectedHours] = useState<VolunteerHours | null>(null);
+  const [hours, setHours] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedMeeting, setSelectedMeeting] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<string>('');
-  const [selectedEvent, setSelectedEvent] = useState<string>('');
-  const [hours, setHours] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
-  const [volunteerDate, setVolunteerDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [editingHours, setEditingHours] = useState<VolunteerHours | null>(null);
 
   useEffect(() => {
     fetchMembers();
-    fetchEvents();
+    fetchMeetings();
     fetchVolunteerHours();
   }, []);
 
@@ -86,7 +79,7 @@ const AdminVolunteerHours: React.FC = () => {
     }
   };
 
-  const fetchEvents = async () => {
+  const fetchMeetings = async () => {
     try {
       console.log('=== FETCHING MEETINGS ===');
       const { data, error } = await supabase
@@ -106,7 +99,7 @@ const AdminVolunteerHours: React.FC = () => {
       }
 
       console.log('Fetched meetings:', data);
-      setEvents(data || []);
+      setMeetings(data || []);
     } catch (error) {
       console.error('Error fetching meetings:', error);
       setAlert({
@@ -158,27 +151,26 @@ const AdminVolunteerHours: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMember || !selectedEvent || !hours) {
+    if (!selectedMember || !selectedMeeting || !hours) {
       setAlert({
         type: 'error',
-        message: 'Please select a member, event, and enter hours'
+        message: 'Please select a member, meeting, and enter hours'
       });
       return;
     }
 
     try {
-      const selectedEventData = events.find(e => e.id === selectedEvent);
-      const description = selectedEventData ? `Volunteer hours for ${selectedEventData.title}` : 'Volunteer hours';
+      const selectedMeetingData = meetings.find(e => e.id === selectedMeeting);
+      const description = selectedMeetingData ? `Volunteer hours for ${selectedMeetingData.title}` : 'Volunteer hours';
 
       const { error } = await supabase
         .from('volunteer_hours')
         .insert({
           member_id: selectedMember,
-          event_id: selectedEvent,
+          meeting_id: selectedMeeting,
           hours: parseFloat(hours),
-          date: volunteerDate,
-          notes,
-          description
+          description,
+          created_at: format(new Date(), 'yyyy-MM-dd HH:mm:ss')
         });
 
       if (error) throw error;
@@ -193,10 +185,9 @@ const AdminVolunteerHours: React.FC = () => {
 
       // Reset form
       setSelectedMember('');
-      setSelectedEvent('');
+      setSelectedMeeting('');
       setHours('');
-      setNotes('');
-      setVolunteerDate(format(new Date(), 'yyyy-MM-dd'));
+      setDescription('');
     } catch (error) {
       console.error('Error recording volunteer hours:', error);
       setAlert({
@@ -207,16 +198,16 @@ const AdminVolunteerHours: React.FC = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Member', 'Event', 'Hours', 'Date', 'Notes'];
+    const headers = ['Member', 'Meeting', 'Hours', 'Date', 'Description'];
     const csvData = volunteerHours.map(hours => {
       const member = members.find(m => m.id === hours.member_id);
-      const event = events.find(e => e.id === hours.event_id);
+      const meeting = meetings.find(e => e.id === hours.meeting_id);
       return [
         member ? `${member.first_name} ${member.last_name}` : 'Unknown',
-        event ? event.title : 'Unknown',
+        meeting ? meeting.title : 'Unknown',
         hours.hours.toString(),
-        format(new Date(hours.date), 'MM/dd/yyyy'),
-        hours.notes || ''
+        format(new Date(hours.created_at), 'MM/dd/yyyy'),
+        hours.description
       ];
     });
 
@@ -233,12 +224,11 @@ const AdminVolunteerHours: React.FC = () => {
   };
 
   const handleEdit = (hours: VolunteerHours) => {
-    setEditingHours(hours);
+    setSelectedHours(hours);
     setSelectedMember(hours.member_id);
-    setSelectedEvent(hours.event_id);
+    setSelectedMeeting(hours.meeting_id);
     setHours(hours.hours.toString());
-    setNotes(hours.notes || '');
-    setVolunteerDate(hours.date);
+    setDescription(hours.description);
   };
 
   const handleDelete = async (hoursId: string) => {
@@ -272,29 +262,28 @@ const AdminVolunteerHours: React.FC = () => {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingHours || !selectedMember || !selectedEvent || !hours) {
+    if (!selectedHours || !selectedMember || !selectedMeeting || !hours) {
       setAlert({
         type: 'error',
-        message: 'Please select a member, event, and enter hours'
+        message: 'Please select a member, meeting, and enter hours'
       });
       return;
     }
 
     try {
-      const selectedEventData = events.find(e => e.id === selectedEvent);
-      const description = selectedEventData ? `Volunteer hours for ${selectedEventData.title}` : 'Volunteer hours';
+      const selectedMeetingData = meetings.find(e => e.id === selectedMeeting);
+      const description = selectedMeetingData ? `Volunteer hours for ${selectedMeetingData.title}` : 'Volunteer hours';
 
       const { error } = await supabase
         .from('volunteer_hours')
         .update({
           member_id: selectedMember,
-          event_id: selectedEvent,
+          meeting_id: selectedMeeting,
           hours: parseFloat(hours),
-          date: volunteerDate,
-          notes,
-          description
+          description,
+          created_at: format(new Date(), 'yyyy-MM-dd HH:mm:ss')
         })
-        .eq('id', editingHours.id);
+        .eq('id', selectedHours.id);
 
       if (error) throw error;
 
@@ -307,12 +296,11 @@ const AdminVolunteerHours: React.FC = () => {
       });
 
       // Reset form and editing state
-      setEditingHours(null);
+      setSelectedHours(null);
       setSelectedMember('');
-      setSelectedEvent('');
+      setSelectedMeeting('');
       setHours('');
-      setNotes('');
-      setVolunteerDate(format(new Date(), 'yyyy-MM-dd'));
+      setDescription('');
     } catch (error) {
       console.error('Error updating volunteer hours:', error);
       setAlert({
@@ -380,12 +368,12 @@ const AdminVolunteerHours: React.FC = () => {
               </div>
               <div className="col-span-3">
                 <SelectField
-                  label="Event"
-                  value={selectedEvent}
-                  onChange={(e) => setSelectedEvent(e.target.value)}
-                  options={events.map(event => ({
-                    value: event.id,
-                    label: `${event.title} (${format(new Date(event.date), 'MMM d, yyyy')})`
+                  label="Meeting"
+                  value={selectedMeeting}
+                  onChange={(e) => setSelectedMeeting(e.target.value)}
+                  options={meetings.map(meeting => ({
+                    value: meeting.id,
+                    label: `${meeting.title} (${format(new Date(meeting.date), 'MMM d, yyyy')})`
                   }))}
                   required
                 />
@@ -402,18 +390,9 @@ const AdminVolunteerHours: React.FC = () => {
               </div>
               <div className="col-span-2">
                 <TextField
-                  label="Date"
-                  type="date"
-                  value={volunteerDate}
-                  onChange={(e) => setVolunteerDate(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="col-span-2">
-                <TextField
-                  label="Notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  label="Description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
               <div className="col-span-12 flex justify-end">
@@ -436,7 +415,7 @@ const AdminVolunteerHours: React.FC = () => {
                       Member
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Event
+                      Meeting
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Hours
@@ -445,7 +424,7 @@ const AdminVolunteerHours: React.FC = () => {
                       Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Notes
+                      Description
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -455,23 +434,23 @@ const AdminVolunteerHours: React.FC = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {volunteerHours.map((hours) => {
                     const member = members.find(m => m.id === hours.member_id);
-                    const event = events.find(e => e.id === hours.event_id);
+                    const meeting = meetings.find(e => e.id === hours.meeting_id);
                     return (
                       <tr key={hours.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {member ? `${member.first_name} ${member.last_name}` : 'Unknown'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {event ? event.title : 'Unknown'}
+                          {meeting ? meeting.title : 'Unknown'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {hours.hours}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {format(new Date(hours.date), 'MMM d, yyyy')}
+                          {format(new Date(hours.created_at), 'MMM d, yyyy')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {hours.notes}
+                          {hours.description}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex space-x-2">
@@ -501,7 +480,7 @@ const AdminVolunteerHours: React.FC = () => {
         </Card>
 
         {/* Edit Modal */}
-        {editingHours && (
+        {selectedHours && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="fixed inset-0 bg-black bg-opacity-50"></div>
             <div className="relative min-h-screen flex items-center justify-center p-4">
@@ -523,12 +502,12 @@ const AdminVolunteerHours: React.FC = () => {
                     </div>
                     <div className="col-span-3">
                       <SelectField
-                        label="Event"
-                        value={selectedEvent}
-                        onChange={(e) => setSelectedEvent(e.target.value)}
-                        options={events.map(event => ({
-                          value: event.id,
-                          label: `${event.title} (${format(new Date(event.date), 'MMM d, yyyy')})`
+                        label="Meeting"
+                        value={selectedMeeting}
+                        onChange={(e) => setSelectedMeeting(e.target.value)}
+                        options={meetings.map(meeting => ({
+                          value: meeting.id,
+                          label: `${meeting.title} (${format(new Date(meeting.date), 'MMM d, yyyy')})`
                         }))}
                         required
                       />
@@ -545,18 +524,9 @@ const AdminVolunteerHours: React.FC = () => {
                     </div>
                     <div className="col-span-2">
                       <TextField
-                        label="Date"
-                        type="date"
-                        value={volunteerDate}
-                        onChange={(e) => setVolunteerDate(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <TextField
-                        label="Notes"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
+                        label="Description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
                       />
                     </div>
                     <div className="col-span-12 flex justify-end space-x-3">
@@ -564,12 +534,11 @@ const AdminVolunteerHours: React.FC = () => {
                         type="button"
                         variant="outline"
                         onClick={() => {
-                          setEditingHours(null);
+                          setSelectedHours(null);
                           setSelectedMember('');
-                          setSelectedEvent('');
+                          setSelectedMeeting('');
                           setHours('');
-                          setNotes('');
-                          setVolunteerDate(format(new Date(), 'yyyy-MM-dd'));
+                          setDescription('');
                         }}
                       >
                         Cancel
