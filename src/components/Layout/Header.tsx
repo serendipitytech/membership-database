@@ -53,12 +53,6 @@ const Header: React.FC = () => {
             >
               Events
             </a>
-            <Link 
-              to="/volunteer" 
-              className={`text-gray-600 hover:text-primary-700 px-3 py-2 text-sm font-medium ${location.pathname === '/volunteer' ? 'text-primary-700 border-b-2 border-primary-500' : ''}`}
-            >
-              Volunteer
-            </Link>
             {isLoggedIn ? (
               <Link to="/account" className="ml-4">
                 <button className="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-md flex items-center transition duration-150">
@@ -120,13 +114,6 @@ const Header: React.FC = () => {
             >
               Events
             </a>
-            <Link 
-              to="/volunteer" 
-              className={`block px-3 py-2 rounded-md text-base font-medium ${location.pathname === '/volunteer' ? 'bg-primary-50 text-primary-700' : 'text-gray-700 hover:bg-gray-50'}`}
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Volunteer
-            </Link>
             {isLoggedIn ? (
               <Link 
                 to="/account" 

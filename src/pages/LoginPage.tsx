@@ -13,7 +13,7 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
-  const [loginMethod, setLoginMethod] = useState<'password' | 'email'>('password');
+  const [loginMethod, setLoginMethod] = useState<'password' | 'email'>('email');
   const navigate = useNavigate();
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -144,6 +144,21 @@ const LoginPage: React.FC = () => {
               Email Link
             </button>
           </div>
+
+          {loginMethod === 'email' && (
+            <div className="mb-6 p-4 bg-primary-50 rounded-lg">
+              <h3 className="text-sm font-medium text-primary-800 mb-2">How Email Link Login Works:</h3>
+              <ol className="text-sm text-primary-700 space-y-2 list-decimal list-inside">
+                <li>Enter your email address below</li>
+                <li>Click "Send Login Link"</li>
+                <li>Check your email for a secure login link from noreply@mail.app.supabase.io</li>
+                <li>Click the link to sign in automatically</li>
+              </ol>
+              <p className="mt-3 text-sm text-primary-700 italic">
+                Note: The login link may be sent to your spam folder. Please check there if you don't see it in your inbox.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <TextField
