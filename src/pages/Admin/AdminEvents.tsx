@@ -8,7 +8,8 @@ import SelectField from '../../components/Form/SelectField';
 import { Plus, Trash2, Edit2, Calendar, Clock, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
-import { Meeting, MeetingType, MEETING_TYPES, MEETING_TYPE_LABELS, MEETING_TYPE_COLORS } from '../../types/meeting';
+import { Meeting, MeetingType, MEETING_TYPES, MEETING_TYPE_LABELS, MEETING_TYPE_COLORS, updateMeetingTypes } from '../../types/meeting';
+import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 
 const AdminEvents: React.FC = () => {
   const [events, setEvents] = useState<Meeting[]>([]);
@@ -18,13 +19,30 @@ const AdminEvents: React.FC = () => {
   const [time, setTime] = useState('12:00');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState<MeetingType>(MEETING_TYPES.GENERAL);
+  const [type, setType] = useState<MeetingType>('');
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchEvents();
+    loadMeetingTypes();
   }, []);
+
+  const loadMeetingTypes = async () => {
+    try {
+      const values = await getPickListValues(PICK_LIST_CATEGORIES.MEETING_TYPES);
+      updateMeetingTypes(values);
+      if (values.length > 0) {
+        setType(values[0].value);
+      }
+    } catch (error) {
+      console.error('Error loading meeting types:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load meeting types'
+      });
+    }
+  };
 
   const fetchEvents = async () => {
     try {
@@ -104,7 +122,7 @@ const AdminEvents: React.FC = () => {
       setTime('12:00');
       setLocation('');
       setDescription('');
-      setType(MEETING_TYPES.GENERAL);
+      setType('');
 
       setAlert({
         type: 'success',
@@ -239,6 +257,7 @@ const AdminEvents: React.FC = () => {
                     label="Location"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
+                    required
                   />
                 </div>
                 <div className="col-span-2">
@@ -277,7 +296,7 @@ const AdminEvents: React.FC = () => {
                       setTime('12:00');
                       setLocation('');
                       setDescription('');
-                      setType(MEETING_TYPES.GENERAL);
+                      setType('');
                     }}
                     variant="outline"
                   >
@@ -347,9 +366,9 @@ const AdminEvents: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          MEETING_TYPE_COLORS[event.type].bg
-                        } ${MEETING_TYPE_COLORS[event.type].text}`}>
-                          {MEETING_TYPE_LABELS[event.type]}
+                          MEETING_TYPE_COLORS[event.type]?.bg || 'bg-gray-100'
+                        } ${MEETING_TYPE_COLORS[event.type]?.text || 'text-gray-800'}`}>
+                          {MEETING_TYPE_LABELS[event.type] || event.type}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

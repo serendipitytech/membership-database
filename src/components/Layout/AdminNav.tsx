@@ -7,7 +7,8 @@ import {
   Calendar, 
   Clock, 
   UsersRound,
-  Home
+  Home,
+  Settings
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
@@ -20,6 +21,7 @@ const AdminNav: React.FC = () => {
     { path: '/admin/events', label: 'Events', icon: Calendar },
     { path: '/admin/volunteer-hours', label: 'Volunteer Hours', icon: Clock },
     { path: '/admin/attendance', label: 'Meeting Attendance', icon: UsersRound },
+    { path: '/admin/functions', label: 'Admin Functions', icon: Settings },
   ];
 
   const location = useLocation();

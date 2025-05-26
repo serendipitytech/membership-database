@@ -1,4 +1,6 @@
-export type MeetingType = 'general' | 'committee' | 'special';
+import { PickListValue } from '../lib/pickLists';
+
+export type MeetingType = string;
 
 export interface Meeting {
   id: string;
@@ -32,20 +34,37 @@ export interface MeetingWithAttendance extends Meeting {
   }>;
 }
 
-export const MEETING_TYPES = {
-  GENERAL: 'general',
-  COMMITTEE: 'committee',
-  SPECIAL: 'special'
-} as const;
+// These will be populated from the pick list system
+export let MEETING_TYPES: Record<string, string> = {};
+export let MEETING_TYPE_LABELS: Record<string, string> = {};
+export let MEETING_TYPE_COLORS: Record<string, { bg: string; text: string }> = {};
 
-export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
-  [MEETING_TYPES.GENERAL]: 'General Meeting',
-  [MEETING_TYPES.COMMITTEE]: 'Committee Meeting',
-  [MEETING_TYPES.SPECIAL]: 'Special Event'
-};
+// Function to update meeting types from pick list values
+export const updateMeetingTypes = (values: PickListValue[]) => {
+  MEETING_TYPES = {};
+  MEETING_TYPE_LABELS = {};
+  MEETING_TYPE_COLORS = {};
 
-export const MEETING_TYPE_COLORS: Record<MeetingType, { bg: string; text: string }> = {
-  [MEETING_TYPES.GENERAL]: { bg: 'bg-blue-100', text: 'text-blue-800' },
-  [MEETING_TYPES.COMMITTEE]: { bg: 'bg-purple-100', text: 'text-purple-800' },
-  [MEETING_TYPES.SPECIAL]: { bg: 'bg-green-100', text: 'text-green-800' }
+  values.forEach((value) => {
+    MEETING_TYPES[value.value] = value.value;
+    MEETING_TYPE_LABELS[value.value] = value.description || value.value;
+    
+    // Assign colors based on value
+    switch (value.value) {
+      case 'general':
+        MEETING_TYPE_COLORS[value.value] = { bg: 'bg-blue-100', text: 'text-blue-800' };
+        break;
+      case 'board':
+        MEETING_TYPE_COLORS[value.value] = { bg: 'bg-purple-100', text: 'text-purple-800' };
+        break;
+      case 'committee':
+        MEETING_TYPE_COLORS[value.value] = { bg: 'bg-green-100', text: 'text-green-800' };
+        break;
+      case 'special':
+        MEETING_TYPE_COLORS[value.value] = { bg: 'bg-yellow-100', text: 'text-yellow-800' };
+        break;
+      default:
+        MEETING_TYPE_COLORS[value.value] = { bg: 'bg-gray-100', text: 'text-gray-800' };
+    }
+  });
 }; 

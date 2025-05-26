@@ -14,6 +14,7 @@ import PaymentPage from './pages/PaymentPage';
 import AdminPayments from './pages/Admin/AdminPayments';
 import TestSupabase from './pages/TestSupabase';
 import AdminEvents from './pages/Admin/AdminEvents';
+import AdminFunctions from './pages/AdminFunctions';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
         <Route path="/admin/payments" element={<AdminPayments />} />
         <Route path="/test-supabase" element={<TestSupabase />} />
         <Route path="/admin/events" element={<AdminEvents />} />
+        <Route path="/admin/functions" element={<AdminFunctions />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

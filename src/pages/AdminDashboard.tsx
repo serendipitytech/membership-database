@@ -379,6 +379,21 @@ const AdminDashboard: React.FC = () => {
               <CreditCard className="h-8 w-8 text-primary-500" />
             </div>
           </Card>
+
+          <Card
+            className="hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate('/admin/functions')}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Admin Functions</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Manage pick lists and system settings
+                </p>
+              </div>
+              <Settings className="h-8 w-8 text-primary-500" />
+            </div>
+          </Card>
         </div>
       </div>
     </Layout>
