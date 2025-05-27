@@ -16,6 +16,7 @@ import TestSupabase from './pages/TestSupabase';
 import AdminEvents from './pages/Admin/AdminEvents';
 import AdminFunctions from './pages/AdminFunctions';
 import AdminAttendance from './pages/Admin/AdminAttendance';
+import AdminImports from './pages/Admin/AdminImports';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
         <Route path="/test-supabase" element={<TestSupabase />} />
         <Route path="/admin/events" element={<AdminEvents />} />
         <Route path="/admin/functions" element={<AdminFunctions />} />
+        <Route path="/admin/imports" element={<AdminImports />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
