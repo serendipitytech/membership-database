@@ -6,7 +6,7 @@ import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { clearPickListCache, PICK_LIST_CATEGORIES } from '../lib/pickLists';
+import { clearPickListCache, PICK_LIST_CATEGORIES, formatValueForHTML } from '../lib/pickLists';
 
 // Utility functions for name formatting
 const formatDisplayName = (name: string): string => {
@@ -33,7 +33,8 @@ interface PickListCategory {
 interface PickListValue {
   id: string;
   category_id: string;
-  value: string;
+  value: string;  // HTML-compatible value (auto-generated)
+  name: string;   // User-friendly name (what user enters)
   description: string;
   display_order: number;
   is_active: boolean;
@@ -237,15 +238,19 @@ const AdminFunctions: React.FC = () => {
           if (error) throw error;
         }
       } else {
+        // For values, generate the HTML-compatible value from the name
+        const valueData = {
+          value: formatValueForHTML(formData.name),
+          name: formData.name,
+          description: formData.description,
+          display_order: formData.display_order,
+          is_active: formData.is_active,
+        };
+
         if (editingItem) {
           const { error } = await supabase
             .from('pick_list_values')
-            .update({
-              value: formData.value,
-              description: formData.description,
-              display_order: formData.display_order,
-              is_active: formData.is_active,
-            })
+            .update(valueData)
             .eq('id', editingItem.id);
           
           if (error) throw error;
@@ -253,11 +258,8 @@ const AdminFunctions: React.FC = () => {
           const { error } = await supabase
             .from('pick_list_values')
             .insert([{
+              ...valueData,
               category_id: selectedCategory,
-              value: formData.value,
-              description: formData.description,
-              display_order: formData.display_order,
-              is_active: formData.is_active,
             }]);
           
           if (error) throw error;
@@ -436,7 +438,7 @@ const AdminFunctions: React.FC = () => {
                     values.map((value) => (
                       <div key={value.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                         <div>
-                          <h3 className="text-sm font-medium text-gray-900">{formatDisplayName(value.value)}</h3>
+                          <h3 className="text-sm font-medium text-gray-900">{value.name}</h3>
                           {value.description && (
                             <p className="text-sm text-gray-600 mt-1">{value.description}</p>
                           )}
@@ -499,7 +501,7 @@ const AdminFunctions: React.FC = () => {
                 >
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      {editingItem ? 'Edit' : 'Add'} {dialogType === 'category' ? 'Category' : 'Value'}
+                      {editingItem ? 'Edit' : 'Add'} {dialogType === 'category' ? 'Category' : 'Item'}
                     </h3>
                     <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
                       <div className="space-y-4">
@@ -520,11 +522,11 @@ const AdminFunctions: React.FC = () => {
                         ) : (
                           <>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700">Value</label>
+                              <label className="block text-sm font-medium text-gray-700">Name</label>
                               <input
                                 type="text"
-                                value={editingItem ? formatDisplayName(formData.value) : formData.value}
-                                onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                                value={editingItem ? formatDisplayName(formData.name) : formData.name}
+                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                                 required
                                 placeholder="Enter a friendly name (e.g., Red Shoes)"

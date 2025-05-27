@@ -274,6 +274,7 @@ const AdminMembers: React.FC = () => {
 
   const renderMemberCard = (member: Member) => {
     const isExpanded = expandedMembers.has(member.id);
+    const membershipType = membershipTypes.find(type => type.value === member.membership_type);
     
     return (
       <Card key={member.id} className="mb-4">
@@ -327,7 +328,7 @@ const AdminMembers: React.FC = () => {
                 <div>
                   <h4 className="font-medium text-gray-700 mb-2">Membership Details</h4>
                   <p className="text-sm text-gray-600">
-                    Type: {member.membership_type}<br />
+                    Type: {membershipType?.label || member.membership_type}<br />
                     Renewal Date: {format(new Date(member.renewal_date), 'MMM d, yyyy')}
                   </p>
                 </div>
@@ -712,7 +713,7 @@ const AdminMembers: React.FC = () => {
       const types = await getPickListValues(PICK_LIST_CATEGORIES.MEMBERSHIP_TYPES);
       setMembershipTypes(types.map(type => ({
         value: type.value,
-        label: formatDisplayName(type.value)
+        label: type.name
       })));
     } catch (error) {
       console.error('Error loading membership types:', error);

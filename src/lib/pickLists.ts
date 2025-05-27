@@ -2,7 +2,8 @@ import { supabase } from './supabase';
 
 export interface PickListValue {
   id: string;
-  value: string;
+  value: string;  // HTML-compatible value (auto-generated)
+  name: string;   // User-friendly name (what user enters)
   description: string;
   display_order: number;
   is_active: boolean;
@@ -17,6 +18,23 @@ export interface PickListCategory {
 
 // Cache for pick list values
 const pickListCache: Record<string, PickListValue[]> = {};
+
+// Convert user-friendly name to HTML-compatible value
+export function formatValueForHTML(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')  // Replace special chars with underscore
+    .replace(/^_+|_+$/g, '')      // Remove leading/trailing underscores
+    .replace(/_+/g, '_');         // Replace multiple underscores with single
+}
+
+// Format value for display
+export function formatValueForDisplay(value: string): string {
+  return value
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 export async function getPickListValues(categoryName: string): Promise<PickListValue[]> {
   // Check cache first
@@ -55,10 +73,10 @@ export async function getPickListValues(categoryName: string): Promise<PickListV
       return [];
     }
 
-    // Format the values to use value as label
+    // Format the values to use name as label
     const formattedData = (data || []).map((item: PickListValue) => ({
       ...item,
-      label: item.value // Use value as the label
+      label: item.name // Use name for display
     }));
 
     // Update cache

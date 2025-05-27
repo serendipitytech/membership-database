@@ -104,14 +104,14 @@ const RegistrationPage: React.FC = () => {
         const membershipValues = await getPickListValues(PICK_LIST_CATEGORIES.MEMBERSHIP_TYPES);
         setMembershipTypes(membershipValues.map(value => ({
           value: value.value,
-          label: value.value
+          label: value.name
         })));
 
         // Fetch shirt sizes
         const shirtValues = await getPickListValues(PICK_LIST_CATEGORIES.TSHIRT_SIZES);
         setShirtSizes(shirtValues.map(value => ({
-          value: value.value.toUpperCase(),
-          label: value.value.toUpperCase()
+          value: value.value,
+          label: value.name
         })));
 
         setIsLoading(false);
