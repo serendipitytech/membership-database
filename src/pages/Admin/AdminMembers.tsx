@@ -11,6 +11,7 @@ import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, 
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
+import { formatPhoneNumber } from '../../lib/formValidation';
 
 interface Member {
   id: string;
@@ -283,7 +284,7 @@ const AdminMembers: React.FC = () => {
                 {member.first_name} {member.last_name}
               </h3>
               <p className="text-sm text-gray-600">{member.email}</p>
-              <p className="text-sm text-gray-600">{member.phone}</p>
+              <p className="text-sm text-gray-600">{formatPhoneNumber(member.phone)}</p>
             </div>
             <div className="flex space-x-2">
               <Button
@@ -868,8 +869,9 @@ const AdminMembers: React.FC = () => {
                       />
                       <TextField
                         label="Phone"
+                        type="tel"
                         value={selectedMember.phone}
-                        onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value})}
+                        onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value.replace(/\D/g, '')})}
                       />
                       <TextField
                         label="Address"
@@ -1013,8 +1015,9 @@ const AdminMembers: React.FC = () => {
                       />
                       <TextField
                         label="Phone"
+                        type="tel"
                         value={selectedMember.phone}
-                        onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value})}
+                        onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value.replace(/\D/g, '')})}
                       />
                       <TextField
                         label="Address"

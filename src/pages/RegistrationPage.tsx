@@ -9,6 +9,19 @@ import Alert from '../components/UI/Alert';
 import Card from '../components/UI/Card';
 import { getInterestCategories, registerMember, updateMemberInterests } from '../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../lib/pickLists';
+import {
+  formatPhoneNumber,
+  validateZipCode,
+  validateEmail,
+  validatePhoneNumber,
+  validateDate,
+  validateRequired,
+  validateName,
+  validateAddress,
+  validateCity,
+  validateVoterId,
+  validatePrecinct
+} from '../lib/formValidation';
 
 interface FormData {
   first_name: string;
@@ -22,7 +35,7 @@ interface FormData {
   zip: string;
   membership_type: string;
   date_of_birth: string;
-  shirt_size: string;
+  tshirt_size: string;
   precinct: string;
   voter_id: string;
   emergency_contact_name: string;
@@ -30,7 +43,6 @@ interface FormData {
   emergency_contact_relationship: string;
   tell_us_more: string;
   signature: string;
-  terms_accepted: boolean;
 }
 
 const initialFormData: FormData = {
@@ -45,7 +57,7 @@ const initialFormData: FormData = {
   zip: '',
   membership_type: '',
   date_of_birth: '',
-  shirt_size: '',
+  tshirt_size: '',
   precinct: '',
   voter_id: '',
   emergency_contact_name: '',
@@ -53,7 +65,6 @@ const initialFormData: FormData = {
   emergency_contact_relationship: '',
   tell_us_more: '',
   signature: '',
-  terms_accepted: false,
 };
 
 interface InterestCategory {
@@ -75,59 +86,101 @@ const RegistrationPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [membershipTypes, setMembershipTypes] = useState<Array<{value: string, label: string}>>([]);
   const [shirtSizes, setShirtSizes] = useState<Array<{value: string, label: string}>>([]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchInterests = async () => {
-      const { categories, error } = await getInterestCategories();
-      if (error) {
-        console.error('Error fetching interests:', error);
-        return;
+    const fetchData = async () => {
+      try {
+        // Fetch interests
+        const { categories, error } = await getInterestCategories();
+        if (error) {
+          console.error('Error fetching interests:', error);
+          return;
+        }
+        setInterestCategories(categories || []);
+
+        // Fetch membership types
+        const membershipValues = await getPickListValues(PICK_LIST_CATEGORIES.MEMBERSHIP_TYPES);
+        setMembershipTypes(membershipValues.map(value => ({
+          value: value.value,
+          label: value.value
+        })));
+
+        // Fetch shirt sizes
+        const shirtValues = await getPickListValues(PICK_LIST_CATEGORIES.TSHIRT_SIZES);
+        setShirtSizes(shirtValues.map(value => ({
+          value: value.value.toUpperCase(),
+          label: value.value.toUpperCase()
+        })));
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setAlert({
+          type: 'error',
+          message: 'Failed to load form data'
+        });
+        setIsLoading(false);
       }
-      
-      setInterestCategories(categories || []);
     };
-    
-    fetchInterests();
-    loadMembershipTypes();
-    loadShirtSizes();
+
+    fetchData();
   }, []);
 
-  const loadMembershipTypes = async () => {
-    try {
-      const values = await getPickListValues(PICK_LIST_CATEGORIES.MEMBERSHIP_TYPES);
-      setMembershipTypes(values.map(value => ({
-        value: value.value,
-        label: formatDisplayName(value.value)
-      })));
-    } catch (error) {
-      console.error('Error loading membership types:', error);
-      setAlert({
-        type: 'error',
-        message: 'Failed to load membership types'
-      });
+  const validateField = (name: string, value: string | boolean): string | null => {
+    // Skip validation for optional fields
+    if (name === 'is_cell_phone' || name === 'precinct' || name === 'voter_id' || name === 'tell_us_more') {
+      return null;
     }
-  };
 
-  const loadShirtSizes = async () => {
-    try {
-      const values = await getPickListValues(PICK_LIST_CATEGORIES.TSHIRT_SIZES);
-      setShirtSizes(values.map(value => ({
-        value: value.value,
-        label: formatDisplayName(value.value)
-      })));
-    } catch (error) {
-      console.error('Error loading shirt sizes:', error);
-      setAlert({
-        type: 'error',
-        message: 'Failed to load shirt sizes'
-      });
+    switch (name) {
+      case 'first_name':
+      case 'last_name':
+        return validateName(value as string) ? null : 'Please enter a valid name';
+      case 'email':
+        return validateEmail(value as string) ? null : 'Please enter a valid email address';
+      case 'phone':
+      case 'emergency_contact_phone':
+        return validatePhoneNumber(value as string) ? null : 'Please enter a valid 10-digit phone number';
+      case 'zip':
+        return validateZipCode(value as string) ? null : 'Please enter a valid 5-digit ZIP code';
+      case 'date_of_birth':
+        return validateDate(value as string) ? null : 'Please enter a valid date in the past';
+      case 'address':
+        return validateAddress(value as string) ? null : 'Please enter a valid address';
+      case 'city':
+        return validateCity(value as string) ? null : 'Please enter a valid city name';
+      case 'voter_id':
+        return value ? (validateVoterId(value as string) ? null : 'Please enter a valid voter ID') : null;
+      case 'precinct':
+        return value ? (validatePrecinct(value as string) ? null : 'Please enter a valid precinct number') : null;
+      case 'signature':
+        return validateRequired(value as string) ? null : 'Please provide your electronic signature';
+      default:
+        return validateRequired(value) ? null : 'This field is required';
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    let formattedValue = value;
+    let displayValue = value;
+
+    // Format phone numbers for display but store only digits
+    if (name === 'phone' || name === 'emergency_contact_phone') {
+      displayValue = formatPhoneNumber(value);
+      formattedValue = value.replace(/\D/g, ''); // Remove all non-digits
+    }
+
+    setFormData(prev => ({ ...prev, [name]: formattedValue }));
+
+    // Validate the field using the display value
+    const error = validateField(name, displayValue);
+    setFieldErrors(prev => ({
+      ...prev,
+      [name]: error || ''
+    }));
   };
 
   const handleInterestChange = (values: string[]) => {
@@ -137,17 +190,29 @@ const RegistrationPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate form
-    if (step === 1 && (!formData.first_name || !formData.last_name || !formData.email)) {
+    // Validate all required fields
+    const errors: Record<string, string> = {};
+    Object.entries(formData).forEach(([name, value]) => {
+      const error = validateField(name, value);
+      if (error) {
+        errors[name] = error;
+        console.log(`Validation error for ${name}:`, error); // Debug log
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      console.log('Validation errors:', errors); // Debug log
+      setFieldErrors(errors);
       setAlert({
         type: 'error',
-        message: 'Please fill in all required fields'
+        message: 'Please correct the errors in the form'
       });
+      // Scroll to top of the form
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     
     if (step === 1) {
-      // Move to next step
       setStep(2);
       setAlert(null);
       return;
@@ -197,6 +262,8 @@ const RegistrationPage: React.FC = () => {
         type: 'error',
         message: 'There was an error processing your registration. Please try again.'
       });
+      // Scroll to top on error
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
     }
@@ -211,6 +278,7 @@ const RegistrationPage: React.FC = () => {
           value={formData.first_name}
           onChange={handleChange}
           required
+          error={fieldErrors['first_name']}
         />
         <TextField
           id="last_name"
@@ -218,6 +286,7 @@ const RegistrationPage: React.FC = () => {
           value={formData.last_name}
           onChange={handleChange}
           required
+          error={fieldErrors['last_name']}
         />
       </div>
       
@@ -229,6 +298,7 @@ const RegistrationPage: React.FC = () => {
           value={formData.email}
           onChange={handleChange}
           required
+          error={fieldErrors['email']}
         />
         <div className="space-y-2">
           <TextField
@@ -238,6 +308,7 @@ const RegistrationPage: React.FC = () => {
             value={formData.phone}
             onChange={handleChange}
             required
+            error={fieldErrors['phone']}
           />
           <div className="flex items-center">
             <input
@@ -262,11 +333,12 @@ const RegistrationPage: React.FC = () => {
           value={formData.date_of_birth}
           onChange={handleChange}
           required
+          error={fieldErrors['date_of_birth']}
         />
         <SelectField
-          id="shirt_size"
+          id="tshirt_size"
           label="T-Shirt Size"
-          value={formData.shirt_size}
+          value={formData.tshirt_size}
           onChange={handleChange}
           options={[
             { value: '', label: 'Select size' },
@@ -307,6 +379,7 @@ const RegistrationPage: React.FC = () => {
         value={formData.address}
         onChange={handleChange}
         required
+        error={fieldErrors['address']}
       />
       
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -317,6 +390,7 @@ const RegistrationPage: React.FC = () => {
           onChange={handleChange}
           className="col-span-2"
           required
+          error={fieldErrors['city']}
         />
         <SelectField
           id="state"
@@ -383,6 +457,7 @@ const RegistrationPage: React.FC = () => {
           value={formData.zip}
           onChange={handleChange}
           required
+          error={fieldErrors['zip']}
         />
       </div>
       
@@ -392,12 +467,14 @@ const RegistrationPage: React.FC = () => {
           label="Precinct Number"
           value={formData.precinct}
           onChange={handleChange}
+          error={fieldErrors['precinct']}
         />
         <TextField
           id="voter_id"
           label="Voter ID Number"
           value={formData.voter_id}
           onChange={handleChange}
+          error={fieldErrors['voter_id']}
         />
       </div>
       
@@ -410,6 +487,7 @@ const RegistrationPage: React.FC = () => {
             value={formData.emergency_contact_name}
             onChange={handleChange}
             required
+            error={fieldErrors['emergency_contact_name']}
           />
           <TextField
             id="emergency_contact_phone"
@@ -418,6 +496,7 @@ const RegistrationPage: React.FC = () => {
             value={formData.emergency_contact_phone}
             onChange={handleChange}
             required
+            error={fieldErrors['emergency_contact_phone']}
           />
           <TextField
             id="emergency_contact_relationship"
@@ -425,6 +504,7 @@ const RegistrationPage: React.FC = () => {
             value={formData.emergency_contact_relationship}
             onChange={handleChange}
             required
+            error={fieldErrors['emergency_contact_relationship']}
           />
         </div>
       </div>
@@ -471,6 +551,7 @@ const RegistrationPage: React.FC = () => {
               placeholder="Type your full name to sign"
               className="font-['Caveat'] text-xl"
               required
+              error={fieldErrors['signature']}
             />
             <p className="mt-1 text-sm text-gray-500">
               By typing your name above, you are providing your electronic signature

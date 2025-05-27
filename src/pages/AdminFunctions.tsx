@@ -58,6 +58,8 @@ const AdminFunctions: React.FC = () => {
 
   useEffect(() => {
     checkAdminStatus();
+    fetchCategories();
+    ensureTShirtSizes();
   }, []);
 
   const checkAdminStatus = async () => {
@@ -131,6 +133,50 @@ const AdminFunctions: React.FC = () => {
     }
     
     setValues(data || []);
+  };
+
+  const ensureTShirtSizes = async () => {
+    try {
+      // First, ensure the tshirt_sizes category exists
+      const { data: categoryData, error: categoryError } = await supabase
+        .from('pick_list_categories')
+        .select('id')
+        .eq('name', PICK_LIST_CATEGORIES.TSHIRT_SIZES)
+        .single();
+
+      let categoryId;
+      if (categoryError && categoryError.code === 'PGRST116') {
+        // Category doesn't exist, create it
+        const { data: newCategory, error: createError } = await supabase
+          .from('pick_list_categories')
+          .insert([{
+            name: PICK_LIST_CATEGORIES.TSHIRT_SIZES,
+            description: 'T-shirt sizes',
+            display_order: 1
+          }])
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        categoryId = newCategory.id;
+      } else if (categoryError) {
+        throw categoryError;
+      } else {
+        categoryId = categoryData.id;
+      }
+
+      // Refresh the categories and values
+      await fetchCategories();
+      if (categoryId === selectedCategory) {
+        await fetchValues(categoryId);
+      }
+    } catch (error) {
+      console.error('Error ensuring t-shirt sizes:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to ensure t-shirt sizes are properly configured'
+      });
+    }
   };
 
   useEffect(() => {

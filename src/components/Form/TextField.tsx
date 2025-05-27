@@ -1,48 +1,53 @@
 import React from 'react';
+import { formatPhoneNumber } from '../../lib/formValidation';
 
 interface TextFieldProps {
   id: string;
   label: string;
-  type?: string;
-  placeholder?: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  type?: string;
   required?: boolean;
   error?: string;
   className?: string;
+  placeholder?: string;
 }
 
 const TextField: React.FC<TextFieldProps> = ({
   id,
   label,
-  type = 'text',
-  placeholder,
   value,
   onChange,
+  type = 'text',
   required = false,
   error,
   className = '',
+  placeholder
 }) => {
+  // Format phone numbers for display
+  const displayValue = type === 'tel' ? formatPhoneNumber(value) : value;
+
   return (
-    <div className={`mb-4 ${className}`}>
-      <label 
-        htmlFor={id} 
-        className="block text-sm font-medium text-gray-700 mb-1"
-      >
+    <div className={className}>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
         {label}
-        {required && <span className="text-accent-600 ml-1">*</span>}
+        {required && <span className="text-red-500 ml-1">*</span>}
       </label>
       <input
+        type={type}
         id={id}
         name={id}
-        type={type}
-        value={value}
+        value={displayValue}
         onChange={onChange}
-        placeholder={placeholder}
+        className={`w-full px-3 py-2 border ${
+          error ? 'border-red-500' : 'border-gray-300'
+        } rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500`}
         required={required}
-        className={`w-full px-3 py-2 border ${error ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500`}
+        placeholder={placeholder}
       />
-      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="mt-1 text-sm text-red-500">{error}</p>
+      )}
     </div>
   );
 };

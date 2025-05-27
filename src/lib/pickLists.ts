@@ -24,27 +24,50 @@ export async function getPickListValues(categoryName: string): Promise<PickListV
     return pickListCache[categoryName];
   }
 
-  const { data, error } = await supabase
-    .from('pick_list_values')
-    .select('*')
-    .eq('category_id', (
-      await supabase
-        .from('pick_list_categories')
-        .select('id')
-        .eq('name', categoryName)
-        .single()
-    ).data?.id)
-    .eq('is_active', true)
-    .order('display_order');
+  try {
+    // First get the category ID
+    const { data: categoryData, error: categoryError } = await supabase
+      .from('pick_list_categories')
+      .select('id')
+      .eq('name', categoryName)
+      .single();
 
-  if (error) {
-    console.error(`Error fetching pick list values for ${categoryName}:`, error);
+    if (categoryError) {
+      console.error(`Error fetching category for ${categoryName}:`, categoryError);
+      return [];
+    }
+
+    if (!categoryData?.id) {
+      console.error(`Category not found for ${categoryName}`);
+      return [];
+    }
+
+    // Then get the values
+    const { data, error } = await supabase
+      .from('pick_list_values')
+      .select('*')
+      .eq('category_id', categoryData.id)
+      .eq('is_active', true)
+      .order('display_order');
+
+    if (error) {
+      console.error(`Error fetching pick list values for ${categoryName}:`, error);
+      return [];
+    }
+
+    // Format the values to use value as label
+    const formattedData = (data || []).map((item: PickListValue) => ({
+      ...item,
+      label: item.value // Use value as the label
+    }));
+
+    // Update cache
+    pickListCache[categoryName] = formattedData;
+    return formattedData;
+  } catch (error) {
+    console.error(`Error in getPickListValues for ${categoryName}:`, error);
     return [];
   }
-
-  // Update cache
-  pickListCache[categoryName] = data || [];
-  return data || [];
 }
 
 // Function to clear cache when values are updated
