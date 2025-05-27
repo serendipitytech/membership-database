@@ -6,9 +6,12 @@ import Alert from '../../components/UI/Alert';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
 import { Search, Download, Edit2, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { Event, EventWithAttendance, EventType, EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_TYPE_COLORS } from '../../types/event';
+
+const timeZone = 'America/New_York';
 
 interface Member {
   id: string;
@@ -409,7 +412,7 @@ const AdminVolunteerHours: React.FC = () => {
                   onChange={(e) => setSelectedEvent(e.target.value)}
                   options={events.map(event => ({
                     value: event.id,
-                    label: `${event.title} (${format(new Date(event.date), 'MMM d, yyyy')})`
+                    label: `${event.title} (${format(utcToZonedTime(parseISO(event.date), timeZone), 'MMM d, yyyy')})`
                   }))}
                   required
                 />
@@ -457,7 +460,7 @@ const AdminVolunteerHours: React.FC = () => {
                       Total Hours
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Updated
+                      Event Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -477,7 +480,7 @@ const AdminVolunteerHours: React.FC = () => {
                         {record.total_hours}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {format(new Date(record.last_updated), 'MMM d, yyyy')}
+                        {record.event ? format(utcToZonedTime(parseISO(record.event.date), timeZone), 'MMM d, yyyy') : 'Unknown'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="flex space-x-2">
@@ -533,7 +536,7 @@ const AdminVolunteerHours: React.FC = () => {
                         onChange={(e) => setSelectedEvent(e.target.value)}
                         options={events.map(event => ({
                           value: event.id,
-                          label: `${event.title} (${format(new Date(event.date), 'MMM d, yyyy')})`
+                          label: `${event.title} (${format(utcToZonedTime(parseISO(event.date), timeZone), 'MMM d, yyyy')})`
                         }))}
                         required
                       />

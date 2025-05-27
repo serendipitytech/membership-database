@@ -6,10 +6,13 @@ import Alert from '../../components/UI/Alert';
 import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
 import { Search, Plus, Download, X, Users, ChevronRight, Edit2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { Event, EventWithAttendance, EventType, EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_TYPE_COLORS, updateEventTypes } from '../../types/event';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
+
+const timeZone = 'America/New_York';
 
 interface Member {
   id: string;
@@ -344,7 +347,7 @@ const AdminAttendance: React.FC = () => {
                 }}
                 options={events.map(event => ({
                   value: event.id,
-                  label: `${event.title} (${format(new Date(event.date), 'MMM d, yyyy')})`
+                  label: `${event.title} (${format(utcToZonedTime(parseISO(event.date), timeZone), 'MMM d, yyyy')})`
                 }))}
               />
             </div>
@@ -462,7 +465,7 @@ const AdminAttendance: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {format(new Date(event.date), 'MMM d, yyyy')}
+                          {format(utcToZonedTime(parseISO(event.date), timeZone), 'MMM d, yyyy')}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -514,7 +517,7 @@ const AdminAttendance: React.FC = () => {
                   </button>
                 </div>
                 <p className="mt-1 text-sm text-gray-500">
-                  {format(new Date(selectedEventAttendance.event.date), 'MMMM d, yyyy')} • 
+                  {format(utcToZonedTime(parseISO(selectedEventAttendance.event.date), timeZone), 'MMMM d, yyyy')} • 
                   {selectedEventAttendance.event.location || 'No location specified'}
                 </p>
               </div>

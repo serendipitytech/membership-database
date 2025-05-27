@@ -6,9 +6,12 @@ import Alert from '../../components/UI/Alert';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
 import { Search, Plus, Download, Edit2, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
+
+const timeZone = 'America/New_York';
 
 interface Member {
   id: string;
@@ -121,8 +124,8 @@ const AdminPayments: React.FC = () => {
     }
 
     try {
-      // Calculate expiration date based on payment date
-      const paymentDateObj = new Date(paymentDate);
+      // Calculate expiration date based on payment date in Eastern Time
+      const paymentDateObj = utcToZonedTime(parseISO(paymentDate), timeZone);
       const paymentMonth = paymentDateObj.getMonth() + 1; // JavaScript months are 0-based
       let expirationYear;
 
@@ -176,7 +179,7 @@ const AdminPayments: React.FC = () => {
       setAmount('');
       setPaymentMethod('');
       setNotes('');
-      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+      setPaymentDate(format(utcToZonedTime(new Date(), timeZone), 'yyyy-MM-dd'));
       setIsRecurring(false);
     } catch (error) {
       console.error('Error recording payment:', error);
@@ -282,7 +285,7 @@ const AdminPayments: React.FC = () => {
       return [
         member ? `${member.first_name} ${member.last_name}` : 'Unknown',
         payment.amount.toString(),
-        format(new Date(payment.date), 'MM/dd/yyyy'),
+        format(utcToZonedTime(parseISO(payment.date), timeZone), 'MM/dd/yyyy'),
         payment.payment_method,
         payment.status,
         payment.is_recurring ? 'Yes' : 'No',
@@ -298,7 +301,7 @@ const AdminPayments: React.FC = () => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `payments_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.download = `payments_${format(utcToZonedTime(new Date(), timeZone), 'yyyy-MM-dd')}.csv`;
     link.click();
   };
 
@@ -492,7 +495,7 @@ const AdminPayments: React.FC = () => {
                           ${payment.amount.toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {format(new Date(payment.date), 'MMM d, yyyy')}
+                          {format(utcToZonedTime(parseISO(payment.date), timeZone), 'MMM d, yyyy')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {payment.payment_method}
