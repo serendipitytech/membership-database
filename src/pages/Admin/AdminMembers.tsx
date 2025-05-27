@@ -77,6 +77,8 @@ const AdminMembers: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
   const [membershipTypes, setMembershipTypes] = useState<Array<{value: string, label: string}>>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const membersPerPage = 20;
   const navigate = useNavigate();
 
   const initializeInterestData = async () => {
@@ -277,94 +279,50 @@ const AdminMembers: React.FC = () => {
     const membershipType = membershipTypes.find(type => type.value === member.membership_type);
     
     return (
-      <Card key={member.id} className="mb-4">
-        <div className="p-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {member.first_name} {member.last_name}
-              </h3>
-              <p className="text-sm text-gray-600">{member.email}</p>
-              <p className="text-sm text-gray-600">{formatPhoneNumber(member.phone)}</p>
-            </div>
-            <div className="flex space-x-2">
-              <Button
-                onClick={() => toggleMemberExpansion(member.id)}
-                variant="outline"
-                size="sm"
-              >
-                {isExpanded ? 'Show Less' : 'Show More'}
-              </Button>
-              <Button
-                onClick={() => handleEditMember(member)}
-                variant="outline"
-                size="sm"
-              >
-                Edit
-              </Button>
-              {!member.is_admin && (
-                <button
-                  onClick={() => handleDeleteMember(member.id)}
-                  className="text-red-600 hover:text-red-900"
-                  title="Delete member"
-                >
-                  <Trash2 className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Expanded Content */}
-          {isExpanded && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Contact Information</h4>
-                  <p className="text-sm text-gray-600">
-                    {member.address}<br />
-                    {member.city}, {member.state} {member.zip}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-700 mb-2">Membership Details</h4>
-                  <p className="text-sm text-gray-600">
-                    Type: {membershipType?.label || member.membership_type}<br />
-                    Renewal Date: {format(new Date(member.renewal_date), 'MMM d, yyyy')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <h4 className="font-medium text-gray-700 mb-2">Interests</h4>
-                <div className="flex flex-wrap gap-2">
-                  {member.interests.map(interest => (
-                    <span key={interest.id} className="px-2 py-1 bg-gray-100 rounded-full text-sm">
-                      {interest.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <h4 className="font-medium text-gray-700 mb-2">Recent Activity</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      Volunteer Hours: {member.volunteer_hours.length}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Meetings Attended: {member.meeting_attendance.length}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      Total Payments: {member.payments.length}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+      <Card key={member.id} className="relative cursor-pointer" onClick={() => toggleMemberExpansion(member.id)}>
+        <div className="absolute top-2 right-2 flex space-x-2" onClick={(e) => e.stopPropagation()}>
+          <Button
+            onClick={() => handleEditMember(member)}
+            variant="outline"
+            size="sm"
+            className="p-2"
+          >
+            <Edit2 className="h-4 w-4" />
+          </Button>
+          {!member.is_admin && (
+            <button
+              onClick={() => handleDeleteMember(member.id)}
+              className="text-red-600 hover:text-red-900 p-2"
+              title="Delete member"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           )}
+        </div>
+        <div className="p-4 pt-12">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            {member.first_name} {member.last_name}
+          </h3>
+          <p className="text-sm text-gray-600 mb-1">{member.email}</p>
+          <p className="text-sm text-gray-600 mb-2">{formatPhoneNumber(member.phone)}</p>
+          <p className="text-sm text-gray-600">
+            {member.city}, {member.state}
+          </p>
+          <p className="text-sm text-gray-600 mb-2">
+            Type: {membershipType?.label || member.membership_type}
+          </p>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {member.interests.slice(0, 3).map(interest => (
+              <span key={interest.id} className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
+                {interest.name}
+              </span>
+            ))}
+            {member.interests.length > 3 && (
+              <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
+                +{member.interests.length - 3} more
+              </span>
+            )}
+          </div>
         </div>
       </Card>
     );
@@ -761,6 +719,111 @@ const AdminMembers: React.FC = () => {
       .join(' ');
   };
 
+  // Add this new component for the member details modal
+  const MemberDetailsModal = ({ member, onClose }: { member: Member, onClose: () => void }) => {
+    const membershipType = membershipTypes.find(type => type.value === member.membership_type);
+    
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
+        <div className="fixed inset-0 bg-black bg-opacity-50"></div>
+        <div className="relative min-h-screen flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {member.first_name} {member.last_name}
+                </h2>
+                <button
+                  onClick={onClose}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <span className="sr-only">Close</span>
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Contact Information</h3>
+                  <p className="mt-1 text-sm text-gray-900">{member.email}</p>
+                  <p className="mt-1 text-sm text-gray-900">{formatPhoneNumber(member.phone)}</p>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {member.address}<br />
+                    {member.city}, {member.state} {member.zip}
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Membership Details</h3>
+                  <p className="mt-1 text-sm text-gray-900">Type: {membershipType?.label || member.membership_type}</p>
+                  <p className="mt-1 text-sm text-gray-900">Status: {member.status}</p>
+                  <p className="mt-1 text-sm text-gray-900">Member since: {format(new Date(member.created_at), 'MMM d, yyyy')}</p>
+                  {member.renewal_date && (
+                    <p className="mt-1 text-sm text-gray-900">Renewal date: {format(new Date(member.renewal_date), 'MMM d, yyyy')}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Interests</h3>
+                <div className="flex flex-wrap gap-2">
+                  {member.interests.map(interest => (
+                    <span key={interest.id} className="px-3 py-1 bg-gray-100 rounded-full text-sm">
+                      {interest.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {member.volunteer_hours.length > 0 && (
+                <div className="border-t border-gray-200 pt-6 mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Volunteer Hours</h3>
+                  <div className="space-y-2">
+                    {member.volunteer_hours.map(hours => (
+                      <div key={hours.id} className="flex justify-between text-sm">
+                        <span>{format(new Date(hours.date), 'MMM d, yyyy')}</span>
+                        <span>{hours.hours} hours - {hours.activity}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {member.meeting_attendance.length > 0 && (
+                <div className="border-t border-gray-200 pt-6 mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Meeting Attendance</h3>
+                  <div className="space-y-2">
+                    {member.meeting_attendance.map(attendance => (
+                      <div key={attendance.id} className="flex justify-between text-sm">
+                        <span>{attendance.meeting.name}</span>
+                        <span>{format(new Date(attendance.meeting.date), 'MMM d, yyyy')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {member.payments.length > 0 && (
+                <div className="border-t border-gray-200 pt-6 mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Payment History</h3>
+                  <div className="space-y-2">
+                    {member.payments.map(payment => (
+                      <div key={payment.id} className="flex justify-between text-sm">
+                        <span>{format(new Date(payment.date), 'MMM d, yyyy')}</span>
+                        <span>${payment.amount} - {payment.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -822,20 +885,50 @@ const AdminMembers: React.FC = () => {
           />
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           {isLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
               <p className="mt-4 text-gray-600">Loading members...</p>
             </div>
           ) : (
-            members
-              .filter(member => 
-                member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                member.email.toLowerCase().includes(searchTerm.toLowerCase())
-              )
-              .map(renderMemberCard)
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {members
+                  .filter(member => 
+                    member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    member.email.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
+                  .map(renderMemberCard)}
+              </div>
+
+              {/* Pagination */}
+              {members.length > membersPerPage && (
+                <div className="flex justify-center mt-8">
+                  <nav className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      Page {currentPage} of {Math.ceil(members.length / membersPerPage)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(members.length / membersPerPage)))}
+                      disabled={currentPage === Math.ceil(members.length / membersPerPage)}
+                    >
+                      Next
+                    </Button>
+                  </nav>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -1140,6 +1233,14 @@ const AdminMembers: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Member Details Modal */}
+        {expandedMembers.size > 0 && (
+          <MemberDetailsModal
+            member={members.find(m => expandedMembers.has(m.id))!}
+            onClose={() => setExpandedMembers(new Set())}
+          />
         )}
       </div>
     </Layout>
