@@ -2,7 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
-import AdminNav from './AdminNav';
+import Sidebar from './Sidebar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -15,10 +15,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      {isAdminPage && <AdminNav />}
-      <main className="flex-grow">
-        {children}
-      </main>
+      {isAdminPage ? (
+        <div className="flex flex-1 min-h-0">
+          <Sidebar />
+          <main className="flex-1 min-h-0">
+            {children}
+          </main>
+        </div>
+      ) : (
+        <main className="flex-grow">
+          {children}
+        </main>
+      )}
       <Footer />
     </div>
   );

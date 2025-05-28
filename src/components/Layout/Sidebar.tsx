@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
   Users,
@@ -11,73 +11,88 @@ import {
   Heart,
   Clock
 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
-const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: Home },
-  { name: 'Members', href: '/admin/members', icon: Users },
-  { name: 'Events', href: '/admin/events', icon: Calendar },
-  { name: 'Attendance', href: '/admin/attendance', icon: Users },
-  { name: 'Volunteer Hours', href: '/admin/volunteer-hours', icon: Clock },
-  { name: 'Interests', href: '/admin/interests', icon: Heart },
-  { name: 'Payments', href: '/admin/payments', icon: CreditCard },
-  { name: 'Functions', href: '/admin/functions', icon: Settings },
+function SidebarItem({ icon, label, to, active, collapsed }) {
+  return (
+    <Link
+      to={to}
+      className={`flex items-center px-4 py-2 rounded transition-colors hover:bg-slate-800 ${active ? 'bg-slate-800 text-white' : 'text-slate-300'} ${collapsed ? 'justify-center' : ''}`}
+    >
+      {icon}
+      {!collapsed && <span className="ml-3">{label}</span>}
+    </Link>
+  );
+}
+
+const navItems = [
+  { label: 'Dashboard', to: '/admin', icon: <Home /> },
+  { label: 'Members', to: '/admin/members', icon: <Users /> },
+  { label: 'Events', to: '/admin/events', icon: <Calendar /> },
+  { label: 'Attendance', to: '/admin/attendance', icon: <ClipboardList /> },
+  { label: 'Volunteer Hours', to: '/admin/volunteer-hours', icon: <Clock /> },
+  { label: 'Interests', to: '/admin/interests', icon: <Heart /> },
+  { label: 'Payments', to: '/admin/payments', icon: <CreditCard /> },
+  { label: 'Functions', to: '/admin/functions', icon: <Settings /> },
 ];
 
-const Sidebar: React.FC = () => {
+const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      navigate('/login');
+    } catch (err) {
+      setError('Failed to log out. Please try again.');
+    }
+  };
 
   return (
-    <div className="flex flex-col h-full bg-gray-800">
-      <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-        <div className="flex items-center flex-shrink-0 px-4">
-          <h1 className="text-white text-xl font-bold">Admin Panel</h1>
-        </div>
-        <nav className="mt-5 flex-1 px-2 space-y-1">
-          {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                  isActive
-                    ? 'bg-gray-900 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <item.icon
-                  className={`mr-3 flex-shrink-0 h-6 w-6 ${
-                    isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-300'
-                  }`}
-                  aria-hidden="true"
-                />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
+    <aside className={`h-screen bg-slate-900 flex flex-col transition-all duration-200 ${collapsed ? 'w-20' : 'w-64'}`}>
+      <div className="flex items-center h-16 px-4 font-bold text-xl text-white border-b border-slate-800">
+        {!collapsed ? 'NW Democrats' : 'NW'}
       </div>
-      <div className="flex-shrink-0 flex border-t border-gray-700 p-4">
+      <nav className="flex-1 overflow-y-auto min-h-0 py-4 space-y-1">
+        {navItems.map((item) => (
+          <SidebarItem
+            key={item.to}
+            icon={item.icon}
+            label={item.label}
+            to={item.to}
+            active={location.pathname === item.to}
+            collapsed={collapsed}
+          />
+        ))}
+      </nav>
+      <div className="p-2 border-t border-slate-800">
         <button
-          onClick={() => {
-            // Handle logout
-          }}
-          className="flex-shrink-0 w-full group block"
+          onClick={() => setCollapsed((c) => !c)}
+          className="w-full flex items-center justify-center text-slate-400 hover:text-white py-2"
         >
-          <div className="flex items-center">
-            <div>
-              <LogOut
-                className="inline-block h-6 w-6 rounded-full text-gray-400 group-hover:text-gray-300"
-                aria-hidden="true"
-              />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-white">Logout</p>
-            </div>
-          </div>
+          {collapsed ? (
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+          ) : (
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+          )}
+          {!collapsed && <span className="ml-2 text-sm">{collapsed ? 'Expand' : 'Collapse'}</span>}
         </button>
+        <button
+          onClick={handleLogout}
+          className={`w-full flex items-center justify-center text-slate-400 hover:text-white py-2 mt-2 ${collapsed ? 'justify-center' : ''}`}
+        >
+          <LogOut className="h-6 w-6" />
+          {!collapsed && <span className="ml-3">Logout</span>}
+        </button>
+        {error && (
+          <div className="text-red-500 text-xs mt-2 text-center">{error}</div>
+        )}
       </div>
-    </div>
+    </aside>
   );
 };
 
