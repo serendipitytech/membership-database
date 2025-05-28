@@ -113,7 +113,10 @@ const DEFAULT_VALUES = {
   status: 'active',
   terms_accepted: true,
   is_admin: false,
-  is_cell_phone: true
+  is_cell_phone: true,
+  registration_date: new Date().toISOString().split('T')[0], // Today's date
+  joined_date: new Date().toISOString().split('T')[0], // Today's date
+  renewal_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 1 year from now
 };
 
 const AdminImports: React.FC = () => {
@@ -633,6 +636,15 @@ const AdminImports: React.FC = () => {
   const processMemberImport = async (rows: any[]) => {
     if (!importPreview?.mapping) return;
 
+    // Validate default membership type is selected
+    if (!defaultMembershipType) {
+      setAlert({
+        type: 'error',
+        message: 'Please select a default membership type before importing'
+      });
+      return;
+    }
+
     setIsProcessingImport(true);
     setProgress({ current: 0, total: rows.length, message: 'Processing members...' });
 
@@ -640,7 +652,7 @@ const AdminImports: React.FC = () => {
     const processedMembers = importPreview.allRows.map(row => {
       const member: any = {
         ...DEFAULT_VALUES,
-        membership_type: defaultMembershipType,
+        membership_type: defaultMembershipType, // Use the selected default type
         first_name: null,
         last_name: null,
         email: null
@@ -649,39 +661,60 @@ const AdminImports: React.FC = () => {
       Object.entries(sourceFields).forEach(([destField, sourceField]) => {
         const sourceIndex = importPreview.headers.indexOf(sourceField);
         if (sourceIndex !== -1) {
-          const value = row[sourceIndex];
+          let value = row[sourceIndex];
           
-          // Handle phone numbers - strip all non-numeric characters
-          if (destField === 'phone' || destField === 'emergency_contact_phone') {
-            const digits = value ? value.replace(/\D/g, '') : '';
-            member[destField] = digits.length === 10 ? digits : '';
-          }
-          // Handle dates - try to parse in various formats
-          else if (destField === 'date_of_birth') {
-            if (value) {
-              // Try different date formats
-              for (const format of TRANSFORMATION_TYPES.DATE.formats) {
-                try {
-                  const date = parse(value, format.value, new Date());
-                  member[destField] = format(date, 'yyyy-MM-dd');
-                  break;
-                } catch (e) {
-                  continue;
+          // Clean and validate the value based on field type
+          switch (destField) {
+            case 'email':
+              value = value ? value.toLowerCase().trim() : null;
+              break;
+            case 'phone':
+            case 'emergency_contact_phone':
+              value = value ? value.replace(/\D/g, '') : null;
+              value = value && value.length === 10 ? value : null;
+              break;
+            case 'date_of_birth':
+            case 'registration_date':
+            case 'joined_date':
+            case 'renewal_date':
+              if (value) {
+                // Try different date formats
+                for (const format of TRANSFORMATION_TYPES.DATE.formats) {
+                  try {
+                    const date = parse(value, format.value, new Date());
+                    if (isValid(date)) {
+                      value = format(date, 'yyyy-MM-dd');
+                      break;
+                    }
+                  } catch (e) {
+                    continue;
+                  }
                 }
+              } else {
+                value = null;
               }
-            }
+              break;
+            case 'tshirt_size':
+              const validSizes = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+              value = value ? value.toUpperCase() : null;
+              value = validSizes.includes(value) ? value : null;
+              break;
+            case 'first_name':
+            case 'last_name':
+              value = value ? value.trim() : null;
+              break;
+            default:
+              value = value ? value.trim() : null;
           }
-          // Handle t-shirt size - ensure it's one of the allowed values
-          else if (destField === 'tshirt_size') {
-            const validSizes = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
-            member[destField] = validSizes.includes(value?.toUpperCase()) ? value.toUpperCase() : null;
-          }
-          // All other fields
-          else {
-            member[destField] = value || null;
-          }
+          
+          member[destField] = value;
         }
       });
+
+      // Ensure required fields have values
+      if (!member.membership_type) {
+        member.membership_type = defaultMembershipType;
+      }
 
       return member;
     });
@@ -725,44 +758,84 @@ const AdminImports: React.FC = () => {
 
     for (const confirmation of importConfirmations) {
       try {
-        if (confirmation.action === 'skip') continue;
+        if (confirmation.action === 'skip') {
+          console.log(`Skipping existing member: ${confirmation.member.email}`);
+          continue;
+        }
+
+        // Get the membership type value from the ID
+        const selectedType = membershipTypes.find(type => type.id === confirmation.member.membership_type);
+        if (!selectedType) {
+          throw new Error('Invalid membership type');
+        }
+
+        // Create the member data with the correct membership type value
+        const memberData = {
+          ...confirmation.member,
+          membership_type: selectedType.value // Use the actual value instead of the ID
+        };
 
         if (confirmation.action === 'merge' && confirmation.existingMember) {
           // Update existing member
           const { error: updateError } = await supabase
             .from('members')
-            .update(confirmation.member)
+            .update(memberData)
             .eq('id', confirmation.existingMember.id);
 
-          if (updateError) throw updateError;
+          if (updateError) {
+            console.error('Error updating member:', updateError);
+            throw updateError;
+          }
           successCount++;
         } else if (confirmation.action === 'new') {
           // Insert new member
           const { error: insertError } = await supabase
             .from('members')
-            .insert([confirmation.member]);
+            .insert([memberData]);
 
-          if (insertError) throw insertError;
+          if (insertError) {
+            console.error('Error inserting member:', insertError);
+            // Add more detailed error information
+            const errorDetails = insertError.code === '23505' 
+              ? 'Duplicate email address' 
+              : insertError.message;
+            throw new Error(`${errorDetails} (${memberData.email})`);
+          }
           successCount++;
         }
       } catch (error) {
         errorCount++;
-        errors.push(`Error processing member ${confirmation.member.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const memberName = `${confirmation.member.first_name} ${confirmation.member.last_name}`;
+        const errorMessage = error instanceof Error 
+          ? `Error processing member ${memberName} (${confirmation.member.email}): ${error.message}`
+          : `Error processing member ${memberName} (${confirmation.member.email}): Unknown error`;
+        errors.push(errorMessage);
       }
     }
 
+    // Show detailed results
+    const resultMessage = `Import completed: ${successCount} members processed successfully, ${errorCount} errors`;
     setAlert({
       type: errorCount > 0 ? 'warning' : 'success',
-      message: `Import completed. ${successCount} members processed successfully. ${errorCount} errors. ${errors.length > 0 ? ' See console for details.' : ''}`
+      message: (
+        <div className="space-y-4">
+          <div>{resultMessage}</div>
+          {errors.length > 0 && (
+            <div>
+              <div className="font-semibold mb-2">Failed Records:</div>
+              <ul className="list-disc pl-5 space-y-1">
+                {errors.map((error, index) => (
+                  <li key={index} className="text-sm">{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )
     });
-
-    if (errors.length > 0) {
-      console.error('Import errors:', errors);
-    }
 
     setIsProcessingImport(false);
     setIsConfirmationModalOpen(false);
-    setImportConfirmations([]);
   };
 
   return (
@@ -959,6 +1032,56 @@ const AdminImports: React.FC = () => {
                   className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 w-64"
                 />
               </div>
+
+              {/* Default Values Section */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium mb-4">Default Values</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Default Membership Type
+                    </label>
+                    <select
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                      value={defaultMembershipType}
+                      onChange={(e) => setDefaultMembershipType(e.target.value)}
+                    >
+                      <option value="">Select a membership type...</option>
+                      {membershipTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.value}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Default Status
+                    </label>
+                    <select
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                      value={DEFAULT_VALUES.status}
+                      onChange={(e) => {
+                        setImportPreview(prev => ({
+                          ...prev!,
+                          mapping: {
+                            ...prev!.mapping,
+                            defaultValues: {
+                              ...prev!.mapping.defaultValues,
+                              status: e.target.value
+                            }
+                          }
+                        }));
+                      }}
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               {/* Show alert inside the modal if present */}
               {alert && (
                 <Alert
