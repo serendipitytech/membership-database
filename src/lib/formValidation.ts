@@ -1,7 +1,9 @@
 // Phone number formatting
-export const formatPhoneNumber = (value: string): string => {
+export const formatPhoneNumber = (value: string | null): string => {
+  if (!value) return '';
+  
   // Remove all non-digit characters
-  const digits = (value || '').replace(/\D/g, '');
+  const digits = value.replace(/\D/g, '');
 
   // If not exactly 10 digits, return blank
   if (digits.length !== 10) {
