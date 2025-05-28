@@ -5,12 +5,14 @@ import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
-import { Plus, Trash2, Edit2, Calendar, Clock, MapPin } from 'lucide-react';
+import { Plus, Trash2, Edit2, Calendar, Clock, MapPin, Users } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { Event, EventType, EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_TYPE_COLORS, updateEventTypes } from '../../types/event';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
+import { formatDate } from '../../utils/formatters';
+import DataTable from '../../components/UI/DataTable';
 
 const timeZone = 'America/New_York';
 
@@ -111,13 +113,24 @@ const AdminEvents: React.FC = () => {
 
   const fetchEvents = async () => {
     try {
+      setIsLoading(true);
       const { data, error } = await supabase
         .from('events')
-        .select('*')
+        .select(`
+          *,
+          attendance_count:event_attendance(count)
+        `)
         .order('date', { ascending: false });
 
       if (error) throw error;
-      setEvents(data || []);
+      
+      // Transform the data to include the attendance count
+      const transformedData = data?.map((event: Event & { attendance_count: { count: number }[] }) => ({
+        ...event,
+        attendance_count: event.attendance_count?.[0]?.count || 0
+      })) || [];
+      
+      setEvents(transformedData);
       setIsLoading(false);
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -245,6 +258,60 @@ const AdminEvents: React.FC = () => {
     setDescription(event.description || '');
     setType(event.type);
   };
+
+  const handleViewAttendance = (event: Event) => {
+    // Implement the logic to view attendance for the event
+    console.log('View attendance for event:', event);
+  };
+
+  const columns = [
+    {
+      header: 'Event Name',
+      accessor: 'title',
+      sortable: true
+    },
+    {
+      header: 'Date',
+      accessor: 'date',
+      sortable: true,
+      render: (value: string) => formatDate(value)
+    },
+    {
+      header: 'Location',
+      accessor: 'location',
+      sortable: true
+    },
+    {
+      header: 'Description',
+      accessor: 'description'
+    },
+    {
+      header: 'Attendance',
+      accessor: (row: Event) => row.attendance_count || 0,
+      sortable: true,
+      render: (value: number, row: Event) => (
+        <div className="flex items-center space-x-2">
+          <span>{value} attendees</span>
+          <div className="flex space-x-1">
+            <button
+              onClick={() => handleEdit(row)}
+              className="text-primary-600 hover:text-primary-900"
+              title="Edit attendance"
+            >
+              <Edit2 className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => handleViewAttendance(row)}
+              className="text-primary-600 hover:text-primary-900"
+              title="View attendees"
+            >
+              <Users className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )
+    }
+  ];
 
   if (isLoading) {
     return (
@@ -380,78 +447,13 @@ const AdminEvents: React.FC = () => {
                 <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
                   <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
                     <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Event Details
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Date & Time
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Location
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Type
-                            </th>
-                            <th scope="col" className="relative px-6 py-3">
-                              <span className="sr-only">Actions</span>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {events.map((event) => (
-                            <tr key={event.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{event.title}</div>
-                                {event.description && (
-                                  <div className="text-sm text-gray-500">{event.description}</div>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center text-sm text-gray-900">
-                                  <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                                  {format(utcToZonedTime(parseISO(event.date), timeZone), 'MMM d, yyyy')}
-                                </div>
-                                <div className="flex items-center text-sm text-gray-500">
-                                  <Clock className="h-4 w-4 mr-2 text-gray-400" />
-                                  {event.time}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                {event.location ? (
-                                  <div className="flex items-center text-sm text-gray-900">
-                                    <MapPin className="h-4 w-4 mr-2 text-gray-400" />
-                                    {event.location}
-                                  </div>
-                                ) : (
-                                  <span className="text-sm text-gray-500">No location specified</span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${EVENT_TYPE_COLORS[event.type]?.bg || 'bg-gray-100'} ${EVENT_TYPE_COLORS[event.type]?.text || 'text-gray-800'}`}>
-                                  {EVENT_TYPE_LABELS[event.type] || event.type}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button
-                                  onClick={() => handleEdit(event)}
-                                  className="text-indigo-600 hover:text-indigo-900 mr-4"
-                                >
-                                  <Edit2 className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(event.id)}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <DataTable
+                        columns={columns}
+                        data={events}
+                        searchable={true}
+                        searchPlaceholder="Search events..."
+                        className="bg-white shadow rounded-lg"
+                      />
                     </div>
                   </div>
                 </div>

@@ -10,6 +10,7 @@ export interface Event {
   location?: string;
   description?: string;
   type: EventType;
+  attendance_count?: number;
   created_at?: string;
   updated_at?: string;
 }

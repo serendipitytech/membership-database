@@ -7,7 +7,7 @@ import Alert from '../../components/UI/Alert';
 import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
 import CheckboxGroup from '../../components/Form/CheckboxGroup';
-import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight, Grid, List } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
@@ -80,6 +80,13 @@ const AdminMembers: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const membersPerPage = 20;
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedPrecinct, setSelectedPrecinct] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [statusOptions, setStatusOptions] = useState<Array<{value: string, label: string}>>([]);
+  const [precinctOptions, setPrecinctOptions] = useState<Array<{value: string, label: string}>>([]);
 
   const initializeInterestData = async () => {
     try {
@@ -158,6 +165,8 @@ const AdminMembers: React.FC = () => {
     fetchInterestCategories();
     checkAdminStatus();
     loadMembershipTypes();
+    loadStatusOptions();
+    loadPrecinctOptions();
   }, []);
 
   const fetchMembers = async () => {
@@ -824,6 +833,116 @@ const AdminMembers: React.FC = () => {
     );
   };
 
+  const loadStatusOptions = async () => {
+    try {
+      const statuses = await getPickListValues(PICK_LIST_CATEGORIES.MEMBER_STATUSES);
+      setStatusOptions(statuses.map(status => ({
+        value: status.value,
+        label: status.name
+      })));
+    } catch (error) {
+      console.error('Error loading status options:', error);
+    }
+  };
+
+  const loadPrecinctOptions = async () => {
+    try {
+      const { data: precincts, error } = await supabase
+        .from('members')
+        .select('precinct')
+        .not('precinct', 'is', null)
+        .order('precinct');
+
+      if (error) throw error;
+
+      // Get unique precinct values and format them for the select component
+      const uniquePrecincts = Array.from(new Set(precincts.map(p => p.precinct)))
+        .filter(Boolean) // Remove any null/undefined values
+        .map(precinct => ({
+          value: precinct,
+          label: precinct
+        }));
+
+      setPrecinctOptions(uniquePrecincts);
+    } catch (error) {
+      console.error('Error loading precinct options:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to load precinct options'
+      });
+    }
+  };
+
+  const filteredMembers = members.filter(member => {
+    // Search term filter
+    const matchesSearch = 
+      member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.email.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Interest filter
+    const matchesInterests = selectedInterests.length === 0 || 
+      selectedInterests.every(interestId => 
+        member.interests.some(interest => interest.id === interestId)
+      );
+
+    // Status filter
+    const matchesStatus = !selectedStatus || member.status === selectedStatus;
+
+    // Precinct filter
+    const matchesPrecinct = selectedPrecinct.length === 0 || 
+      (member.precinct && selectedPrecinct.includes(member.precinct));
+
+    return matchesSearch && matchesInterests && matchesStatus && matchesPrecinct;
+  });
+
+  const renderMemberList = (member: Member) => {
+    const membershipType = membershipTypes.find(type => type.value === member.membership_type);
+    
+    return (
+      <div key={member.id} className="flex items-center justify-between p-4 border-b border-gray-200 hover:bg-gray-50">
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {member.first_name} {member.last_name}
+          </h3>
+          <p className="text-sm text-gray-600">{member.email}</p>
+          <p className="text-sm text-gray-600">{formatPhoneNumber(member.phone)}</p>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {member.interests.slice(0, 3).map(interest => (
+              <span key={interest.id} className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
+                {interest.name}
+              </span>
+            ))}
+            {member.interests.length > 3 && (
+              <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
+                +{member.interests.length - 3} more
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            onClick={() => handleEditMember(member)}
+            variant="outline"
+            size="sm"
+            className="p-2"
+          >
+            <Edit2 className="h-4 w-4" />
+          </Button>
+          {!member.is_admin && (
+            <button
+              onClick={() => handleDeleteMember(member.id)}
+              className="text-red-600 hover:text-red-900 p-2"
+              title="Delete member"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -858,6 +977,30 @@ const AdminMembers: React.FC = () => {
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
             </div>
             <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center"
+            >
+              <Filter className="h-5 w-5 mr-2" />
+              Filters
+            </Button>
+            <div className="flex items-center space-x-2 border border-gray-300 rounded-md">
+              <button
+                onClick={() => setViewMode('card')}
+                className={`p-2 ${viewMode === 'card' ? 'bg-gray-100' : ''}`}
+                title="Card View"
+              >
+                <Grid className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
+                title="List View"
+              >
+                <List className="h-5 w-5" />
+              </button>
+            </div>
+            <Button
               variant="secondary"
               onClick={exportToCSV}
               className="flex items-center"
@@ -885,6 +1028,75 @@ const AdminMembers: React.FC = () => {
           />
         )}
 
+        {showFilters && (
+          <Card className="mb-6">
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Interests</h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {interestCategories.map(category => (
+                      <div key={category.id}>
+                        <h4 className="text-xs font-medium text-gray-500 mb-1">{category.name}</h4>
+                        {category.interests.map(interest => (
+                          <label key={interest.id} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedInterests.includes(interest.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedInterests([...selectedInterests, interest.id]);
+                                } else {
+                                  setSelectedInterests(selectedInterests.filter(id => id !== interest.id));
+                                }
+                              }}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-sm text-gray-700">{interest.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Membership Status</h3>
+                  <SelectField
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    options={[
+                      { value: '', label: 'All Statuses' },
+                      ...statusOptions
+                    ]}
+                  />
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Precinct</h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {precinctOptions.map(precinct => (
+                      <label key={precinct.value} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedPrecinct.includes(precinct.value)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPrecinct([...selectedPrecinct, precinct.value]);
+                            } else {
+                              setSelectedPrecinct(selectedPrecinct.filter(p => p !== precinct.value));
+                            }
+                          }}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700">{precinct.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
         <div className="space-y-6">
           {isLoading ? (
             <div className="text-center py-12">
@@ -893,19 +1105,24 @@ const AdminMembers: React.FC = () => {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {members
-                  .filter(member => 
-                    member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    member.email.toLowerCase().includes(searchTerm.toLowerCase())
-                  )
-                  .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
-                  .map(renderMemberCard)}
-              </div>
+              {viewMode === 'card' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredMembers
+                    .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
+                    .map(renderMemberCard)}
+                </div>
+              ) : (
+                <Card>
+                  <div className="divide-y divide-gray-200">
+                    {filteredMembers
+                      .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
+                      .map(renderMemberList)}
+                  </div>
+                </Card>
+              )}
 
               {/* Pagination */}
-              {members.length > membersPerPage && (
+              {filteredMembers.length > membersPerPage && (
                 <div className="flex justify-center mt-8">
                   <nav className="flex items-center space-x-2">
                     <Button
@@ -916,12 +1133,12 @@ const AdminMembers: React.FC = () => {
                       Previous
                     </Button>
                     <span className="text-sm text-gray-600">
-                      Page {currentPage} of {Math.ceil(members.length / membersPerPage)}
+                      Page {currentPage} of {Math.ceil(filteredMembers.length / membersPerPage)}
                     </span>
                     <Button
                       variant="outline"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(members.length / membersPerPage)))}
-                      disabled={currentPage === Math.ceil(members.length / membersPerPage)}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredMembers.length / membersPerPage)))}
+                      disabled={currentPage === Math.ceil(filteredMembers.length / membersPerPage)}
                     >
                       Next
                     </Button>

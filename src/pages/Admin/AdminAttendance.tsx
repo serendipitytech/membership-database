@@ -11,6 +11,8 @@ import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { Event, EventWithAttendance, EventType, EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_TYPE_COLORS, updateEventTypes } from '../../types/event';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
+import { formatDate } from '../../utils/formatters';
+import DataTable from '../../components/UI/DataTable';
 
 const timeZone = 'America/New_York';
 
@@ -35,8 +37,17 @@ interface Attendance {
   id: string;
   event_id: string;
   member_id: string;
-  date: string;
-  notes?: string;
+  attended: boolean;
+  notes: string;
+  event: {
+    title: string;
+    date: string;
+    location: string;
+  };
+  member: {
+    first_name: string;
+    last_name: string;
+  };
 }
 
 interface EventAttendance {
@@ -126,25 +137,15 @@ const AdminAttendance: React.FC = () => {
 
   const fetchAttendance = async () => {
     try {
+      setIsLoading(true);
       const { data, error } = await supabase
         .from('event_attendance')
         .select(`
           *,
-          members (
-            id,
-            first_name,
-            last_name,
-            email
-          ),
-          events (
-            id,
-            title,
-            date,
-            location,
-            description
-          )
+          event:events(title, date, location),
+          member:members(first_name, last_name)
         `)
-        .order('events(date)', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       setAttendance(data || []);
@@ -277,6 +278,59 @@ const AdminAttendance: React.FC = () => {
     }
   };
 
+  const columns = [
+    {
+      header: 'Event',
+      accessor: (row: EventWithAttendance) => row.event.title,
+      sortable: true
+    },
+    {
+      header: 'Date',
+      accessor: (row: EventWithAttendance) => row.event.date,
+      sortable: true,
+      render: (value: string) => formatDate(value)
+    },
+    {
+      header: 'Location',
+      accessor: (row: EventWithAttendance) => row.event.location,
+      sortable: true
+    },
+    {
+      header: 'Attendees',
+      accessor: (row: EventWithAttendance) => row.attendees.length,
+      sortable: true,
+      render: (value: number, row: EventWithAttendance) => (
+        <div className="flex items-center space-x-2">
+          <Users className="h-5 w-5 text-gray-500" />
+          <span>{value} attendees</span>
+        </div>
+      )
+    },
+    {
+      header: 'Actions',
+      accessor: (row: EventWithAttendance) => row,
+      render: (value: EventWithAttendance) => (
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleEventClick(value, true)}
+            className="text-primary-600 hover:text-primary-900"
+            title="Edit attendance"
+          >
+            <Edit2 className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => handleEventClick(value, false)}
+            className="text-primary-600 hover:text-primary-900"
+            title="View attendees"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  // Transform attendance data to group by events
   const groupedAttendance = events.map(event => {
     const eventAttendees = attendance
       .filter(record => record.event_id === event.id)
@@ -433,69 +487,14 @@ const AdminAttendance: React.FC = () => {
         <Card>
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Event Attendance Records</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Event
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Attendees
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {groupedAttendance.map(({ event, attendees }) => (
-                    <tr key={event.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{event.title}</div>
-                        {event.description && (
-                          <div className="text-sm text-gray-500">{event.description}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {format(utcToZonedTime(parseISO(event.date), timeZone), 'MMM d, yyyy')}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{event.location || 'No location specified'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{attendees.length} attendees</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handleEventClick({ event, attendees }, true)}
-                            className="text-primary-600 hover:text-primary-900"
-                            title="Edit attendance"
-                          >
-                            <Edit2 className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => handleEventClick({ event, attendees })}
-                            className="text-gray-600 hover:text-gray-900"
-                            title="View attendees"
-                          >
-                            <Users className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-4">
+              <DataTable
+                columns={columns}
+                data={groupedAttendance}
+                searchable={true}
+                searchPlaceholder="Search events..."
+                className="bg-white shadow rounded-lg"
+              />
             </div>
           </div>
         </Card>

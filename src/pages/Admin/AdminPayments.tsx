@@ -10,6 +10,8 @@ import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
+import { formatCurrency, formatDate } from '../../utils/formatters';
+import DataTable from '../../components/UI/DataTable';
 
 const timeZone = 'America/New_York';
 
@@ -29,6 +31,10 @@ interface Payment {
   status: string;
   notes?: string;
   is_recurring: boolean;
+  member: {
+    first_name: string;
+    last_name: string;
+  };
 }
 
 const AdminPayments: React.FC = () => {
@@ -71,16 +77,12 @@ const AdminPayments: React.FC = () => {
 
   const fetchPayments = async () => {
     try {
+      setIsLoading(true);
       const { data, error } = await supabase
         .from('payments')
         .select(`
           *,
-          members (
-            id,
-            first_name,
-            last_name,
-            email
-          )
+          member:members(first_name, last_name)
         `)
         .order('date', { ascending: false });
 
@@ -313,6 +315,68 @@ const AdminPayments: React.FC = () => {
       .join(' ');
   };
 
+  const columns = [
+    {
+      header: 'Date',
+      accessor: 'date',
+      sortable: true,
+      render: (value: string) => formatDate(value)
+    },
+    {
+      header: 'Member',
+      accessor: (row: Payment) => `${row.member.first_name} ${row.member.last_name}`,
+      sortable: true
+    },
+    {
+      header: 'Amount',
+      accessor: 'amount',
+      sortable: true,
+      render: (value: number) => formatCurrency(value)
+    },
+    {
+      header: 'Method',
+      accessor: 'payment_method',
+      sortable: true
+    },
+    {
+      header: 'Status',
+      accessor: 'status',
+      sortable: true
+    },
+    {
+      header: 'Recurring',
+      accessor: 'is_recurring',
+      sortable: true,
+      render: (value: boolean) => value ? 'Yes' : 'No'
+    },
+    {
+      header: 'Notes',
+      accessor: 'notes'
+    },
+    {
+      header: 'Actions',
+      accessor: 'id',
+      render: (value: string) => (
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleEdit(payments.find(p => p.id === value) as Payment)}
+            className="text-primary-600 hover:text-primary-900"
+            title="Edit payment"
+          >
+            <Edit2 className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => handleDelete(value)}
+            className="text-red-600 hover:text-red-900"
+            title="Delete payment"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
   if (isLoading) {
     return (
       <Layout>
@@ -453,86 +517,13 @@ const AdminPayments: React.FC = () => {
         <Card>
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Payments</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Member
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Method
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Recurring
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Notes
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {payments.map((payment) => {
-                    const member = members.find(m => m.id === payment.member_id);
-                    return (
-                      <tr key={payment.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {member ? `${member.first_name} ${member.last_name}` : 'Unknown'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${payment.amount.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {format(utcToZonedTime(parseISO(payment.date), timeZone), 'MMM d, yyyy')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {payment.payment_method}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {payment.status}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {payment.is_recurring ? 'Yes' : 'No'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {payment.notes}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleEdit(payment)}
-                              className="text-primary-600 hover:text-primary-900"
-                              title="Edit payment"
-                            >
-                              <Edit2 className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(payment.id)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Delete payment"
-                            >
-                              <Trash2 className="h-5 w-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={columns}
+              data={payments}
+              searchable={true}
+              searchPlaceholder="Search payments..."
+              className="bg-white shadow rounded-lg"
+            />
           </div>
         </Card>
       </div>
