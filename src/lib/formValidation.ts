@@ -1,16 +1,15 @@
 // Phone number formatting
 export const formatPhoneNumber = (value: string): string => {
   // Remove all non-digit characters
-  const digits = value.replace(/\D/g, '');
-  
-  // Format as (XXX) XXX-XXXX
-  if (digits.length <= 3) {
-    return digits;
-  } else if (digits.length <= 6) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  } else {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  const digits = (value || '').replace(/\D/g, '');
+
+  // If not exactly 10 digits, return blank
+  if (digits.length !== 10) {
+    return '';
   }
+
+  // Format as (XXX) XXX-XXXX
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
 };
 
 // ZIP code validation

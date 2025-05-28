@@ -25,10 +25,10 @@ interface MemberData {
   is_admin: boolean;
   interests: string[];
   volunteer_hours: Array<{
-    id: string;
-    date: string;
-    hours: number;
-    description: string;
+  id: string;
+  date: string;
+  hours: number;
+  description: string;
   }>;
   attendance: Array<{
     id: string;
@@ -66,7 +66,7 @@ const AccountPage: React.FC = () => {
           navigate('/login');
           return;
         }
-
+        
         console.log('Fetching member data for email:', user.email);
         const { member, error } = await getMemberByEmail(user.email || '');
         console.log('Member data response:', { member, error });
@@ -79,7 +79,7 @@ const AccountPage: React.FC = () => {
           });
           return;
         }
-
+        
         // Fetch additional member data
         console.log('Fetching additional member data for ID:', member.id);
         const [interests, volunteerHours, attendance] = await Promise.all([
@@ -109,7 +109,7 @@ const AccountPage: React.FC = () => {
         setIsLoading(false);
       }
     };
-
+    
     fetchMemberData();
   }, [navigate]);
 
@@ -244,7 +244,7 @@ const AccountPage: React.FC = () => {
       });
     }
   };
-
+    
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
@@ -511,7 +511,7 @@ const AccountPage: React.FC = () => {
             </Button>
           </div>
         </div>
-
+        
         {alert && (
           <Alert
             type={alert.type}
@@ -520,54 +520,54 @@ const AccountPage: React.FC = () => {
             className="mb-6"
           />
         )}
-
+        
         {/* Tabs */}
         <div className="bg-white shadow rounded-lg">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px">
-              <button
+            <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                  activeTab === 'profile'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                activeTab === 'profile'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
                 onClick={() => setActiveTab('profile')}
-              >
-                Profile
-              </button>
-              <button
+            >
+              Profile
+            </button>
+            <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                  activeTab === 'interests'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                activeTab === 'interests'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
                 onClick={() => setActiveTab('interests')}
-              >
-                Interests
-              </button>
-              <button
+            >
+              Interests
+            </button>
+            <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                  activeTab === 'volunteer'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                activeTab === 'volunteer'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
                 onClick={() => setActiveTab('volunteer')}
-              >
-                Volunteer Hours
-              </button>
-              <button
+            >
+              Volunteer Hours
+            </button>
+            <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
                   activeTab === 'attendance'
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
                 onClick={() => setActiveTab('attendance')}
-              >
+            >
                 Attendance
-              </button>
-            </nav>
-          </div>
-          
+            </button>
+          </nav>
+        </div>
+        
           {renderTabContent()}
         </div>
       </div>

@@ -56,7 +56,14 @@ interface FieldMapping {
 interface ImportPreview {
   headers: string[];
   sampleRows: any[];
+  allRows: any[];
   mapping: FieldMapping;
+}
+
+interface ImportConfirmation {
+  member: any;
+  existingMember: Member | null;
+  action: 'merge' | 'skip' | 'new';
 }
 
 const MEMBER_FIELDS = [
@@ -68,9 +75,16 @@ const MEMBER_FIELDS = [
   { id: 'city', label: 'City', required: false },
   { id: 'state', label: 'State', required: false },
   { id: 'zip', label: 'ZIP', required: false },
-  { id: 'birth_date', label: 'Birth Date', required: false },
-  { id: 'status', label: 'Status', required: false },
-  { id: 'renewal_date', label: 'Renewal Date', required: false }
+  { id: 'date_of_birth', label: 'Date of Birth', required: false },
+  { id: 'tell_us_more', label: 'Tell Us More', required: false },
+  { id: 'emergency_contact_name', label: 'Emergency Contact Name', required: false },
+  { id: 'emergency_contact_phone', label: 'Emergency Contact Phone', required: false },
+  { id: 'emergency_contact_relationship', label: 'Emergency Contact Relationship', required: false },
+  { id: 'tshirt_size', label: 'T-Shirt Size', required: false },
+  { id: 'precinct', label: 'Precinct', required: false },
+  { id: 'voter_id', label: 'Voter ID', required: false },
+  { id: 'special_skills', label: 'Special Skills', required: false },
+  { id: 'health_issues', label: 'Health Issues', required: false }
 ];
 
 const TRANSFORMATION_TYPES = {
@@ -93,6 +107,15 @@ const TRANSFORMATION_TYPES = {
   }
 };
 
+// Default values for required fields that might not be in the import file
+const DEFAULT_VALUES = {
+  membership_type: '', // Will be set from pick list
+  status: 'active',
+  terms_accepted: true,
+  is_admin: false,
+  is_cell_phone: true
+};
+
 const AdminImports: React.FC = () => {
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [unmatchedPayments, setUnmatchedPayments] = useState<UnmatchedPayment[]>([]);
@@ -108,6 +131,9 @@ const AdminImports: React.FC = () => {
   const [mappingName, setMappingName] = useState('');
   const [membershipTypes, setMembershipTypes] = useState<PickListValue[]>([]);
   const [defaultMembershipType, setDefaultMembershipType] = useState<string>('');
+  const [importConfirmations, setImportConfirmations] = useState<ImportConfirmation[]>([]);
+  const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
+  const [isProcessingImport, setIsProcessingImport] = useState(false);
 
   // Load saved mappings and membership types
   useEffect(() => {
@@ -453,38 +479,46 @@ const AdminImports: React.FC = () => {
     if (!file) return;
 
     setIsProcessing(true);
+    setSelectedMapping(null); // Reset mapping selection on file change
     try {
       const fileType = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') ? 'excel' : 'csv';
       let headers: string[] = [];
+      let allRows: any[] = [];
       let sampleRows: any[] = [];
 
       if (fileType === 'excel') {
         const data = await readExcelFile(file);
         headers = data.headers;
+        allRows = data.rows;
         sampleRows = data.rows.slice(0, 5); // Get first 5 rows for preview
       } else {
         const data = await readCSVFile(file);
         headers = data.headers;
+        allRows = data.rows;
         sampleRows = data.rows.slice(0, 5);
       }
+
+      // Start with empty mapping
+      const mapping: FieldMapping = {
+        id: '',
+        name: '',
+        sourceFields: {},
+        transformations: {}
+      };
 
       setImportPreview({
         headers,
         sampleRows,
-        mapping: selectedMapping || {
-          id: '',
-          name: '',
-          sourceFields: {},
-          transformations: {}
-        }
+        allRows,
+        mapping
       });
 
       setIsMappingModalOpen(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing file:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to process import file'
+        message: error?.message || 'Failed to process import file'
       });
     } finally {
       setIsProcessing(false);
@@ -599,38 +633,136 @@ const AdminImports: React.FC = () => {
   const processMemberImport = async (rows: any[]) => {
     if (!importPreview?.mapping) return;
 
-    const { sourceFields, transformations } = importPreview.mapping;
-    const processedMembers = rows.map(row => {
-      const member: any = {};
+    setIsProcessingImport(true);
+    setProgress({ current: 0, total: rows.length, message: 'Processing members...' });
+
+    const { sourceFields } = importPreview.mapping;
+    const processedMembers = importPreview.allRows.map(row => {
+      const member: any = {
+        ...DEFAULT_VALUES,
+        membership_type: defaultMembershipType,
+        first_name: null,
+        last_name: null,
+        email: null
+      };
       
       Object.entries(sourceFields).forEach(([destField, sourceField]) => {
         const sourceIndex = importPreview.headers.indexOf(sourceField);
         if (sourceIndex !== -1) {
           const value = row[sourceIndex];
-          member[destField] = applyTransformation(value, destField, transformations[destField] || '');
+          
+          // Handle phone numbers - strip all non-numeric characters
+          if (destField === 'phone' || destField === 'emergency_contact_phone') {
+            const digits = value ? value.replace(/\D/g, '') : '';
+            member[destField] = digits.length === 10 ? digits : '';
+          }
+          // Handle dates - try to parse in various formats
+          else if (destField === 'date_of_birth') {
+            if (value) {
+              // Try different date formats
+              for (const format of TRANSFORMATION_TYPES.DATE.formats) {
+                try {
+                  const date = parse(value, format.value, new Date());
+                  member[destField] = format(date, 'yyyy-MM-dd');
+                  break;
+                } catch (e) {
+                  continue;
+                }
+              }
+            }
+          }
+          // Handle t-shirt size - ensure it's one of the allowed values
+          else if (destField === 'tshirt_size') {
+            const validSizes = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+            member[destField] = validSizes.includes(value?.toUpperCase()) ? value.toUpperCase() : null;
+          }
+          // All other fields
+          else {
+            member[destField] = value || null;
+          }
         }
       });
 
       return member;
     });
 
-    // Insert members in batches
-    const batchSize = 50;
-    for (let i = 0; i < processedMembers.length; i += batchSize) {
-      const batch = processedMembers.slice(i, i + batchSize);
-      const { error } = await supabase
-        .from('members')
-        .insert(batch);
+    // Check for existing members
+    const confirmations: ImportConfirmation[] = [];
+    for (let i = 0; i < processedMembers.length; i++) {
+      const member = processedMembers[i];
+      if (member.email) {
+        const { data: existingMember } = await supabase
+          .from('members')
+          .select('*')
+          .eq('email', member.email)
+          .maybeSingle();
 
-      if (error) {
-        throw new Error(`Error inserting batch starting at index ${i}: ${error.message}`);
+        confirmations.push({
+          member: {
+            ...member,
+            first_name: member.first_name || 'No First Name',
+            last_name: member.last_name || 'No Last Name',
+            email: member.email || 'No Email'
+          },
+          existingMember,
+          action: existingMember ? 'skip' : 'new' // Default to skip for existing members
+        });
+      }
+      setProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+    }
+
+    setImportConfirmations(confirmations);
+    setIsConfirmationModalOpen(true);
+    setProgress(null);
+    setIsProcessingImport(false);
+  };
+
+  const handleImportConfirmation = async () => {
+    setIsProcessingImport(true);
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+
+    for (const confirmation of importConfirmations) {
+      try {
+        if (confirmation.action === 'skip') continue;
+
+        if (confirmation.action === 'merge' && confirmation.existingMember) {
+          // Update existing member
+          const { error: updateError } = await supabase
+            .from('members')
+            .update(confirmation.member)
+            .eq('id', confirmation.existingMember.id);
+
+          if (updateError) throw updateError;
+          successCount++;
+        } else if (confirmation.action === 'new') {
+          // Insert new member
+          const { error: insertError } = await supabase
+            .from('members')
+            .insert([confirmation.member]);
+
+          if (insertError) throw insertError;
+          successCount++;
+        }
+      } catch (error) {
+        errorCount++;
+        errors.push(`Error processing member ${confirmation.member.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
     setAlert({
-      type: 'success',
-      message: `Successfully imported ${processedMembers.length} members`
+      type: errorCount > 0 ? 'warning' : 'success',
+      message: `Import completed. ${successCount} members processed successfully. ${errorCount} errors. ${errors.length > 0 ? ' See console for details.' : ''}`
     });
+
+    if (errors.length > 0) {
+      console.error('Import errors:', errors);
+    }
+
+    setIsProcessingImport(false);
+    setIsConfirmationModalOpen(false);
+    setImportConfirmations([]);
   };
 
   return (
@@ -789,33 +921,6 @@ const AdminImports: React.FC = () => {
               <div className="p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Import Members</h2>
                 <div className="space-y-4">
-                  <div className="flex items-center space-x-4 mb-4">
-                    <select
-                      className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                      value={selectedMapping?.id || ''}
-                      onChange={(e) => {
-                        const mapping = savedMappings.find(m => m.id === e.target.value);
-                        setSelectedMapping(mapping || null);
-                      }}
-                    >
-                      <option value="">Select saved mapping...</option>
-                      {savedMappings.map(mapping => (
-                        <option key={mapping.id} value={mapping.id}>
-                          {mapping.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setSelectedMapping(null);
-                        setImportPreview(null);
-                      }}
-                    >
-                      Clear Mapping
-                    </Button>
-                  </div>
-
                   <div className="flex items-center justify-center w-full">
                     <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -844,103 +949,100 @@ const AdminImports: React.FC = () => {
         {isMappingModalOpen && importPreview && (
           <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
             <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <h3 className="text-lg font-semibold mb-4">Map Fields</h3>
-              
-              <div className="mb-4">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold">Map Fields</h3>
                 <input
                   type="text"
                   placeholder="Mapping name"
                   value={mappingName}
                   onChange={(e) => setMappingName(e.target.value)}
-                  className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                  className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 w-64"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-medium mb-2">Source Fields</h4>
-                  <div className="space-y-2">
-                    {importPreview.headers.map((header, index) => (
-                      <div key={index} className="p-2 bg-gray-50 rounded">
-                        {header}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-medium mb-2">Destination Fields</h4>
-                  <div className="space-y-4">
-                    {MEMBER_FIELDS.map(field => (
-                      <div key={field.id} className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          {field.label} {field.required && <span className="text-red-500">*</span>}
-                        </label>
-                        <select
-                          className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                          value={importPreview.mapping.sourceFields[field.id] || ''}
-                          onChange={(e) => {
-                            setImportPreview(prev => ({
-                              ...prev!,
-                              mapping: {
-                                ...prev!.mapping,
-                                sourceFields: {
-                                  ...prev!.mapping.sourceFields,
-                                  [field.id]: e.target.value
-                                }
-                              }
-                            }));
-                          }}
-                        >
-                          <option value="">Select field...</option>
-                          {importPreview.headers.map((header, index) => (
-                            <option key={index} value={header}>
-                              {header}
-                            </option>
-                          ))}
-                        </select>
-
-                        {/* Transformation selector for dates and phone numbers */}
-                        {(field.id === 'birth_date' || field.id === 'renewal_date' || field.id === 'phone') && (
-                          <select
-                            className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                            value={importPreview.mapping.transformations[field.id] || ''}
-                            onChange={(e) => {
-                              setImportPreview(prev => ({
-                                ...prev!,
-                                mapping: {
-                                  ...prev!.mapping,
-                                  transformations: {
-                                    ...prev!.mapping.transformations,
-                                    [field.id]: e.target.value
-                                  }
-                                }
-                              }));
-                            }}
-                          >
-                            <option value="">No transformation</option>
-                            {field.id.includes('date') ? (
-                              TRANSFORMATION_TYPES.DATE.formats.map(format => (
-                                <option key={format.value} value={format.value}>
-                                  {format.label}
-                                </option>
-                              ))
-                            ) : (
-                              TRANSFORMATION_TYPES.PHONE.formats.map(format => (
-                                <option key={format.value} value={format.value}>
-                                  {format.label}
-                                </option>
-                              ))
-                            )}
-                          </select>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* Show alert inside the modal if present */}
+              {alert && (
+                <Alert
+                  type={alert.type}
+                  message={alert.message}
+                  onClose={() => setAlert(null)}
+                  className="mb-4"
+                />
+              )}
+              {/* Mapping selection dropdown */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Load Saved Mapping</label>
+                <select
+                  className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                  value={selectedMapping?.id || ''}
+                  onChange={(e) => {
+                    const mapping = savedMappings.find(m => m.id === e.target.value);
+                    setSelectedMapping(mapping || null);
+                    if (mapping && importPreview) {
+                      // Create a new mapping object with the selected mapping's fields
+                      const newMapping = {
+                        id: mapping.id,
+                        name: mapping.name,
+                        sourceFields: { ...mapping.source_fields },
+                        transformations: { ...mapping.transformations }
+                      };
+                      
+                      // Update the import preview with the new mapping
+                      setImportPreview(prev => prev ? {
+                        ...prev,
+                        mapping: newMapping
+                      } : null);
+                      
+                      // Set the mapping name
+                      setMappingName(mapping.name);
+                    }
+                  }}
+                >
+                  <option value="">Select saved mapping...</option>
+                  {savedMappings.map(mapping => (
+                    <option key={mapping.id} value={mapping.id}>
+                      {mapping.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-
-              {/* Preview Section */}
+              {/* Field mapping UI (dropdowns for mapping file headers to member fields) */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-8">
+                {MEMBER_FIELDS.map(field => (
+                  <div key={field.id} className="space-y-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      {field.label} {field.required && <span className="text-red-500">*</span>}
+                    </label>
+                    <select
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                      value={
+                        importPreview.mapping.sourceFields[field.id] &&
+                        importPreview.headers.includes(importPreview.mapping.sourceFields[field.id])
+                          ? importPreview.mapping.sourceFields[field.id]
+                          : ''
+                      }
+                      onChange={e => {
+                        setImportPreview(prev => ({
+                          ...prev!,
+                          mapping: {
+                            ...prev!.mapping,
+                            sourceFields: {
+                              ...prev!.mapping.sourceFields,
+                              [field.id]: e.target.value
+                            }
+                          }
+                        }));
+                      }}
+                    >
+                      <option value="">Select field...</option>
+                      {importPreview.headers.map((header, index) => (
+                        <option key={index} value={header}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
               <div className="mt-6">
                 <h4 className="font-medium mb-2">Preview</h4>
                 <div className="overflow-x-auto">
@@ -961,14 +1063,29 @@ const AdminImports: React.FC = () => {
                             const sourceField = importPreview.mapping.sourceFields[field.id];
                             const sourceIndex = importPreview.headers.indexOf(sourceField);
                             const value = sourceIndex !== -1 ? row[sourceIndex] : '';
-                            const transformedValue = applyTransformation(
-                              value,
-                              field.id,
-                              importPreview.mapping.transformations[field.id] || ''
-                            );
+                            
+                            // Apply transformations for preview
+                            let displayValue = value;
+                            if (field.id === 'phone' || field.id === 'emergency_contact_phone') {
+                              displayValue = value ? value.replace(/\D/g, '') : '';
+                            } else if (field.id === 'date_of_birth' && value) {
+                              for (const format of TRANSFORMATION_TYPES.DATE.formats) {
+                                try {
+                                  const date = parse(value, format.value, new Date());
+                                  displayValue = format(date, 'yyyy-MM-dd');
+                                  break;
+                                } catch (e) {
+                                  continue;
+                                }
+                              }
+                            } else if (field.id === 'tshirt_size' && value) {
+                              const validSizes = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+                              displayValue = validSizes.includes(value.toUpperCase()) ? value.toUpperCase() : value;
+                            }
+                            
                             return (
                               <td key={field.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {transformedValue}
+                                {displayValue}
                               </td>
                             );
                           })}
@@ -997,13 +1114,215 @@ const AdminImports: React.FC = () => {
                 <Button
                   variant="primary"
                   onClick={() => {
+                    if (!importPreview?.mapping) return;
+                    
+                    // Check for required fields in mapping
+                    const requiredFields = ['first_name', 'last_name', 'email'];
+                    const missingFields = requiredFields.filter(f => !importPreview.mapping.sourceFields[f]);
+                    
+                    if (missingFields.length > 0) {
+                      setAlert({
+                        type: 'error',
+                        message: `Mapping is missing required fields: ${missingFields.join(', ')}. Please map all required fields before importing.`
+                      });
+                      return;
+                    }
+                    
                     // Process the import
-                    processMemberImport(importPreview.sampleRows);
+                    processMemberImport(importPreview.allRows);
                     setIsMappingModalOpen(false);
                   }}
                 >
                   Import
                 </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Import Confirmation Modal */}
+        {isConfirmationModalOpen && (
+          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold">Confirm Import</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {importConfirmations.filter(c => !c.existingMember).length} new members to create
+                    {importConfirmations.filter(c => c.existingMember).length > 0 && 
+                      ` • ${importConfirmations.filter(c => c.existingMember).length} existing members found`}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsConfirmationModalOpen(false);
+                      setImportConfirmations([]);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleImportConfirmation}
+                    disabled={isProcessingImport}
+                  >
+                    {isProcessingImport ? 'Processing...' : 'Confirm Import'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Matched Members Section - Moved to top */}
+                {importConfirmations.filter(c => c.existingMember).length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-md font-medium">
+                        Existing Members Found ({importConfirmations.filter(c => c.existingMember).length})
+                      </h4>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setImportConfirmations(prev => 
+                              prev.map(c => c.existingMember ? { ...c, action: 'merge' } : c)
+                            );
+                          }}
+                        >
+                          Merge All
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setImportConfirmations(prev => 
+                              prev.map(c => c.existingMember ? { ...c, action: 'skip' } : c)
+                            );
+                          }}
+                        >
+                          Skip All
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      {importConfirmations
+                        .filter(confirmation => confirmation.existingMember && confirmation.member)
+                        .map((confirmation, index) => (
+                          <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                            <div className="flex justify-between items-start">
+                              <div className="space-y-2">
+                                <div>
+                                  <h3 className="font-medium text-gray-900">Import Record:</h3>
+                                  <p className="text-sm">
+                                    {confirmation.member?.first_name || 'No First Name'} {confirmation.member?.last_name || 'No Last Name'}
+                                  </p>
+                                  <p className="text-sm text-gray-500">{confirmation.member?.email || 'No Email'}</p>
+                                </div>
+                                <div>
+                                  <h3 className="font-medium text-gray-900">Existing Member:</h3>
+                                  <p className="text-sm">
+                                    {confirmation.existingMember?.first_name || 'No First Name'} {confirmation.existingMember?.last_name || 'No Last Name'}
+                                  </p>
+                                  <p className="text-sm text-gray-500">{confirmation.existingMember?.email || 'No Email'}</p>
+                                </div>
+                              </div>
+                              <div className="flex space-x-2">
+                                <Button
+                                  variant={confirmation.action === 'merge' ? 'primary' : 'outline'}
+                                  onClick={() => {
+                                    setImportConfirmations(prev => 
+                                      prev.map((c, i) => i === index ? { ...c, action: 'merge' } : c)
+                                    );
+                                  }}
+                                >
+                                  Merge
+                                </Button>
+                                <Button
+                                  variant={confirmation.action === 'skip' ? 'primary' : 'outline'}
+                                  onClick={() => {
+                                    setImportConfirmations(prev => 
+                                      prev.map((c, i) => i === index ? { ...c, action: 'skip' } : c)
+                                    );
+                                  }}
+                                >
+                                  Skip
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* New Members Section - Moved to bottom */}
+                {importConfirmations.filter(c => !c.existingMember && c.member).length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-md font-medium">
+                        New Members to Create ({importConfirmations.filter(c => !c.existingMember && c.member).length})
+                      </h4>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setImportConfirmations(prev => 
+                            prev.map(c => !c.existingMember && c.member ? { ...c, action: 'new' } : c)
+                          );
+                        }}
+                      >
+                        Import All New
+                      </Button>
+                    </div>
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 p-4">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="font-medium">Review New Members</p>
+                            <p className="text-sm text-gray-500">
+                              {importConfirmations.filter(c => !c.existingMember && c.member).length} new members will be created
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setImportConfirmations(prev => 
+                                prev.map(c => !c.existingMember && c.member ? { ...c, action: 'new' } : c)
+                              );
+                            }}
+                          >
+                            Import All
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="divide-y">
+                        {importConfirmations
+                          .filter(confirmation => !confirmation.existingMember && confirmation.member)
+                          .map((confirmation, index) => (
+                            <div key={index} className="p-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h3 className="font-medium">
+                                    {confirmation.member?.first_name || 'No First Name'} {confirmation.member?.last_name || 'No Last Name'}
+                                  </h3>
+                                  <p className="text-sm text-gray-500">{confirmation.member?.email || 'No Email'}</p>
+                                </div>
+                                <Button
+                                  variant={confirmation.action === 'new' ? 'primary' : 'outline'}
+                                  onClick={() => {
+                                    setImportConfirmations(prev => 
+                                      prev.map((c, i) => i === index ? { ...c, action: 'new' } : c)
+                                    );
+                                  }}
+                                >
+                                  Import New
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
