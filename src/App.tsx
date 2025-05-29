@@ -14,7 +14,7 @@ import PaymentPage from './pages/PaymentPage';
 import AdminPayments from './pages/Admin/AdminPayments';
 import TestSupabase from './pages/TestSupabase';
 import AdminEvents from './pages/Admin/AdminEvents';
-import AdminFunctions from './pages/AdminFunctions';
+import AdminFunctions from './pages/Admin/AdminFunctions';
 import AdminAttendance from './pages/Admin/AdminAttendance';
 import AdminImports from './pages/Admin/AdminImports';
 import RequireAuth from './components/Auth/RequireAuth';
