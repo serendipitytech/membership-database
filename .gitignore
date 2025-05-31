@@ -22,13 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
+.bolt
 
 # Ignore dependencies and build files
 node_modules/
 dist/
 .vscode/
 .env
+.env.prod
 .env.local
 .DS_Store
 *.log
