@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ListChecks, Upload } from 'lucide-react';
+import { ListChecks, Upload, CreditCard } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import SelectListManager from '../../components/admin-tools/SelectListManager';
 import ImportManager from '../../components/admin-tools/ImportManager';
+import ActBlueImport from '../../components/admin-tools/ActBlueImport';
 
 const ADMIN_TOOLS = [
   {
@@ -16,6 +17,12 @@ const ADMIN_TOOLS = [
     label: 'Data Imports',
     icon: <Upload className="w-5 h-5 mr-2" />,
     component: <ImportManager />,
+  },
+  {
+    key: 'actblue-import',
+    label: 'ActBlue Import',
+    icon: <CreditCard className="w-5 h-5 mr-2" />,
+    component: <ActBlueImport />,
   },
   // Add more tools here in the future
 ];

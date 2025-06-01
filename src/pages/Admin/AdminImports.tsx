@@ -84,7 +84,8 @@ const MEMBER_FIELDS = [
   { id: 'precinct', label: 'Precinct', required: false },
   { id: 'voter_id', label: 'Voter ID', required: false },
   { id: 'special_skills', label: 'Special Skills', required: false },
-  { id: 'health_issues', label: 'Health Issues', required: false }
+  { id: 'health_issues', label: 'Health Issues', required: false },
+  { id: 'is_admin', label: 'Admin Status', required: false }
 ];
 
 const TRANSFORMATION_TYPES = {
@@ -112,7 +113,7 @@ const DEFAULT_VALUES = {
   membership_type: '', // Will be set from pick list
   status: 'active',
   terms_accepted: true,
-  is_admin: false,
+  is_admin: false, // Default to non-admin
   is_cell_phone: true,
   registration_date: new Date().toISOString().split('T')[0], // Today's date
   joined_date: new Date().toISOString().split('T')[0], // Today's date
@@ -786,12 +787,27 @@ const AdminImports: React.FC = () => {
             console.error('Error updating member:', updateError);
             throw updateError;
           }
+
+          // If member is admin, ensure they exist in admins table
+          if (memberData.is_admin) {
+            const { error: adminError } = await supabase
+              .from('admins')
+              .upsert({ user_id: confirmation.existingMember.user_id }, { onConflict: 'user_id' });
+            
+            if (adminError) {
+              console.error('Error updating admin status:', adminError);
+              throw adminError;
+            }
+          }
+
           successCount++;
         } else if (confirmation.action === 'new') {
           // Insert new member
-          const { error: insertError } = await supabase
+          const { data: newMember, error: insertError } = await supabase
             .from('members')
-            .insert([memberData]);
+            .insert([memberData])
+            .select()
+            .single();
 
           if (insertError) {
             console.error('Error inserting member:', insertError);
@@ -801,9 +817,22 @@ const AdminImports: React.FC = () => {
               : insertError.message;
             throw new Error(`${errorDetails} (${memberData.email})`);
           }
+
+          // If member is admin, add them to admins table
+          if (memberData.is_admin && newMember) {
+            const { error: adminError } = await supabase
+              .from('admins')
+              .insert({ user_id: newMember.id });
+            
+            if (adminError) {
+              console.error('Error setting admin status:', adminError);
+              throw adminError;
+            }
+          }
+
           successCount++;
         }
-      } catch (error) {
+      } catch (error: any) {
         errorCount++;
         const memberName = `${confirmation.member.first_name} ${confirmation.member.last_name}`;
         const errorMessage = error instanceof Error 
