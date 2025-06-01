@@ -92,6 +92,7 @@ const RegistrationPage: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setIsLoading(true);
         // Fetch interests
         const { categories, error } = await getInterestCategories();
         if (error) {
@@ -102,6 +103,15 @@ const RegistrationPage: React.FC = () => {
 
         // Fetch membership types
         const membershipValues = await getPickListValues(PICK_LIST_CATEGORIES.MEMBERSHIP_TYPES);
+        console.log('Loaded membership types:', membershipValues); // Debug log
+        if (!membershipValues || membershipValues.length === 0) {
+          console.error('No membership types found');
+          setAlert({
+            type: 'error',
+            message: 'Failed to load membership types. Please try again.'
+          });
+          return;
+        }
         setMembershipTypes(membershipValues.map(value => ({
           value: value.value,
           label: value.name
@@ -109,6 +119,15 @@ const RegistrationPage: React.FC = () => {
 
         // Fetch shirt sizes
         const shirtValues = await getPickListValues(PICK_LIST_CATEGORIES.TSHIRT_SIZES);
+        console.log('Loaded shirt sizes:', shirtValues); // Debug log
+        if (!shirtValues || shirtValues.length === 0) {
+          console.error('No shirt sizes found');
+          setAlert({
+            type: 'error',
+            message: 'Failed to load shirt sizes. Please try again.'
+          });
+          return;
+        }
         setShirtSizes(shirtValues.map(value => ({
           value: value.value,
           label: value.name
@@ -119,7 +138,7 @@ const RegistrationPage: React.FC = () => {
         console.error('Error fetching data:', error);
         setAlert({
           type: 'error',
-          message: 'Failed to load form data'
+          message: 'Failed to load form data. Please try again.'
         });
         setIsLoading(false);
       }
@@ -134,15 +153,23 @@ const RegistrationPage: React.FC = () => {
       return null;
     }
 
+    // For phone numbers, ensure we have a value before validating
+    if ((name === 'phone' || name === 'emergency_contact_phone')) {
+      if (!value) {
+        return 'Please enter a valid 10-digit phone number';
+      }
+      // Ensure we're working with a string and get raw digits
+      const digits = String(value).replace(/\D/g, '');
+      console.log(`Validating field ${name}:`, { original: value, digits, length: digits.length });
+      return digits.length === 10 ? null : 'Please enter a valid 10-digit phone number';
+    }
+
     switch (name) {
       case 'first_name':
       case 'last_name':
         return validateName(value as string) ? null : 'Please enter a valid name';
       case 'email':
         return validateEmail(value as string) ? null : 'Please enter a valid email address';
-      case 'phone':
-      case 'emergency_contact_phone':
-        return validatePhoneNumber(value as string) ? null : 'Please enter a valid 10-digit phone number';
       case 'zip':
         return validateZipCode(value as string) ? null : 'Please enter a valid 5-digit ZIP code';
       case 'date_of_birth':
@@ -164,19 +191,17 @@ const RegistrationPage: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    let formattedValue = value;
-    let displayValue = value;
+    
+    // Update form data directly
+    setFormData(prev => ({ ...prev, [name]: value }));
 
-    // Format phone numbers for display but store only digits
+    // Skip validation for phone numbers for now
     if (name === 'phone' || name === 'emergency_contact_phone') {
-      displayValue = formatPhoneNumber(value);
-      formattedValue = value.replace(/\D/g, ''); // Remove all non-digits
+      return;
     }
 
-    setFormData(prev => ({ ...prev, [name]: formattedValue }));
-
-    // Validate the field using the display value
-    const error = validateField(name, displayValue);
+    // Validate other fields
+    const error = validateField(name, value);
     setFieldErrors(prev => ({
       ...prev,
       [name]: error || ''
@@ -193,15 +218,29 @@ const RegistrationPage: React.FC = () => {
     // Validate all required fields
     const errors: Record<string, string> = {};
     Object.entries(formData).forEach(([name, value]) => {
+      // Skip validation for optional fields
+      if (name === 'is_cell_phone' || name === 'precinct' || name === 'voter_id' || name === 'tell_us_more') {
+        return;
+      }
+
+      // For phone numbers, validate the raw digits
+      if (name === 'phone' || name === 'emergency_contact_phone') {
+        const digits = String(value).replace(/\D/g, '');
+        console.log(`Validating ${name}:`, { original: value, digits, length: digits.length });
+        if (digits.length !== 10) {
+          errors[name] = 'Please enter a valid 10-digit phone number';
+        }
+        return;
+      }
+      
       const error = validateField(name, value);
       if (error) {
         errors[name] = error;
-        console.log(`Validation error for ${name}:`, error); // Debug log
       }
     });
 
     if (Object.keys(errors).length > 0) {
-      console.log('Validation errors:', errors); // Debug log
+      console.log('Validation errors:', errors);
       setFieldErrors(errors);
       setAlert({
         type: 'error',
@@ -230,6 +269,20 @@ const RegistrationPage: React.FC = () => {
       });
       
       if (error) {
+        // Check for duplicate email error
+        if (error.code === '23505' && error.message?.includes('members_email_key')) {
+          setAlert({
+            type: 'error',
+            message: 'This email address is already registered. Please use a different email or sign in if you already have an account.'
+          });
+          // Go back to step 1 and highlight the email field
+          setStep(1);
+          setFieldErrors(prev => ({
+            ...prev,
+            email: 'This email is already registered'
+          }));
+          return;
+        }
         throw error;
       }
       

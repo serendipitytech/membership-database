@@ -5,13 +5,14 @@ export const formatPhoneNumber = (value: string | null): string => {
   // Remove all non-digit characters
   const digits = value.replace(/\D/g, '');
 
-  // If not exactly 10 digits, return blank
-  if (digits.length !== 10) {
-    return '';
+  // Format based on number of digits
+  if (digits.length <= 3) {
+    return digits;
+  } else if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  } else {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
   }
-
-  // Format as (XXX) XXX-XXXX
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
 };
 
 // ZIP code validation
@@ -27,6 +28,7 @@ export const validateEmail = (email: string): boolean => {
 // Phone number validation (allows formatted or unformatted)
 export const validatePhoneNumber = (phone: string): boolean => {
   const digits = phone.replace(/\D/g, '');
+  console.log('Validating phone number:', { original: phone, digits, length: digits.length });
   return digits.length === 10;
 };
 

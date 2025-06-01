@@ -39,10 +39,12 @@ export function formatValueForDisplay(value: string): string {
 export async function getPickListValues(categoryName: string): Promise<PickListValue[]> {
   // Check cache first
   if (pickListCache[categoryName]) {
+    console.log(`Using cached values for ${categoryName}:`, pickListCache[categoryName]);
     return pickListCache[categoryName];
   }
 
   try {
+    console.log(`Fetching values for category: ${categoryName}`);
     // First get the category ID
     const { data: categoryData, error: categoryError } = await supabase
       .from('pick_list_categories')
@@ -60,6 +62,8 @@ export async function getPickListValues(categoryName: string): Promise<PickListV
       return [];
     }
 
+    console.log(`Found category ID ${categoryData.id} for ${categoryName}`);
+
     // Then get the values
     const { data, error } = await supabase
       .from('pick_list_values')
@@ -73,11 +77,18 @@ export async function getPickListValues(categoryName: string): Promise<PickListV
       return [];
     }
 
+    if (!data || data.length === 0) {
+      console.error(`No values found for category ${categoryName}`);
+      return [];
+    }
+
     // Format the values to use name as label
-    const formattedData = (data || []).map((item: PickListValue) => ({
+    const formattedData = data.map((item: PickListValue) => ({
       ...item,
       label: item.name // Use name for display
     }));
+
+    console.log(`Loaded ${formattedData.length} values for ${categoryName}:`, formattedData);
 
     // Update cache
     pickListCache[categoryName] = formattedData;
