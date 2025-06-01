@@ -192,13 +192,15 @@ const RegistrationPage: React.FC = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    // Update form data directly
-    setFormData(prev => ({ ...prev, [name]: value }));
-
-    // Skip validation for phone numbers for now
+    // For phone numbers, store only digits
     if (name === 'phone' || name === 'emergency_contact_phone') {
+      const digits = value.replace(/\D/g, ''); // Remove all non-digits
+      setFormData(prev => ({ ...prev, [name]: digits }));
       return;
     }
+    
+    // Update form data directly for all other fields
+    setFormData(prev => ({ ...prev, [name]: value }));
 
     // Validate other fields
     const error = validateField(name, value);
