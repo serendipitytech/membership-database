@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 .bolt
+*.sql
 
 # Ignore dependencies and build files
 node_modules/
