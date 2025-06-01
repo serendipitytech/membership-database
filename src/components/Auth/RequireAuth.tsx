@@ -9,20 +9,36 @@ export default function RequireAuth({ children, adminOnly = false }) {
 
   useEffect(() => {
     async function check() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/login');
-        return;
-      }
-      if (adminOnly) {
-        const { data: isAdmin, error } = await supabase.rpc('is_admin', { user_id: user.id });
-        if (error || !isAdmin) {
-          navigate('/not-authorized');
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          navigate('/login');
           return;
         }
+
+        if (adminOnly) {
+          // Check if user is an admin using the is_admin function
+          const { data: isAdmin, error } = await supabase.rpc('is_admin', { user_id: user.id });
+          
+          if (error) {
+            console.error('Error checking admin status:', error);
+            navigate('/not-authorized');
+            return;
+          }
+
+          if (!isAdmin) {
+            navigate('/not-authorized');
+            return;
+          }
+        }
+
+        setAllowed(true);
+      } catch (error) {
+        console.error('Error in auth check:', error);
+        navigate('/login');
+      } finally {
+        setLoading(false);
       }
-      setAllowed(true);
-      setLoading(false);
     }
     check();
   }, [adminOnly, navigate]);
