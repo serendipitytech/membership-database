@@ -29,13 +29,13 @@ dist-ssr
 node_modules/
 dist/
 .vscode/
-.env
+.env*
 .env.prod
 .env.local
 .env.dev
 .DS_Store
 *.log
 docker/volume/
-
+supabase/.temp/*
 # Ignore Supabase auto-generated migration files
 supabase/migrations/*.sql
