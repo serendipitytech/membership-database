@@ -213,9 +213,9 @@ const AdminMembers: React.FC = () => {
       if (error) throw error;
       
       // Transform the data to match our Member interface
-      const transformedMembers = (members || []).map(member => ({
+      const transformedMembers = (members || []).map((member: any) => ({
         ...member,
-        interests: member.member_interests?.map(mi => ({
+        interests: member.member_interests?.map((mi: any) => ({
           id: mi.interest.id,
           name: mi.interest.name,
           category: { name: mi.interest.category.name }
@@ -254,9 +254,9 @@ const AdminMembers: React.FC = () => {
       if (error) throw error;
       
       // Filter out any duplicate interests
-      const uniqueCategories = categories?.map(category => ({
+      const uniqueCategories = categories?.map((category: any) => ({
         ...category,
-        interests: category.interests.filter((interest, index, self) =>
+        interests: category.interests.filter((interest: any, index: number, self: any[]) =>
           index === self.findIndex(i => i.id === interest.id)
         )
       })) || [];
@@ -272,7 +272,7 @@ const AdminMembers: React.FC = () => {
   };
 
   const toggleMemberExpansion = (memberId: string) => {
-    setExpandedMembers(prev => {
+    setExpandedMembers((prev: Set<string>) => {
       const newSet = new Set(prev);
       if (newSet.has(memberId)) {
         newSet.delete(memberId);
@@ -375,67 +375,165 @@ const AdminMembers: React.FC = () => {
     }
   };
 
-  const handleSaveMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedMember) return;
-
+  const handleSaveMember = async () => {
     try {
-      // Update member in Supabase
-      const { error } = await supabase
-        .from('members')
-        .update({
-          first_name: selectedMember.first_name,
-          last_name: selectedMember.last_name,
+      setIsLoading(true);
+      
+      // First check if we're authenticated and an admin
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setAlert({
+          type: 'error',
+          message: 'You must be logged in to perform this action'
+        });
+        return;
+      }
+
+      // Check if user is an admin using the is_admin function
+      const { data: isAdmin, error: adminError } = await supabase
+        .rpc('is_admin', { user_id: user.id });
+
+      if (adminError || !isAdmin) {
+        setAlert({
+          type: 'error',
+          message: 'You do not have permission to perform this action'
+        });
+        return;
+      }
+
+      // If this is a new member and they should be an admin
+      if (!selectedMember.id && selectedMember.is_admin) {
+        // Create a new auth user for the admin
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: selectedMember.email,
-          phone: selectedMember.phone,
-          address: selectedMember.address,
-          city: selectedMember.city,
-          state: selectedMember.state,
-          zip: selectedMember.zip,
-          membership_type: selectedMember.membership_type,
-          status: selectedMember.status,
-          is_admin: selectedMember.is_admin
-        })
-        .eq('id', selectedMember.id);
+          email_confirm: true,
+          user_metadata: {
+            first_name: selectedMember.first_name,
+            last_name: selectedMember.last_name
+          }
+        });
 
-      if (error) throw error;
+        if (authError) {
+          throw new Error(`Failed to create auth user: ${authError.message}`);
+        }
 
-      // Update member interests
-      if (selectedMember.interests.length > 0) {
-        // First, delete any existing interests for this member
-        const { error: deleteError } = await supabase
-          .from('member_interests')
-          .delete()
-          .eq('member_id', selectedMember.id);
+        // Set the auth_id in the member data
+        selectedMember.auth_id = authData.user.id;
+      }
 
-        if (deleteError) throw deleteError;
+      // If this is an existing member and their admin status is changing
+      if (selectedMember.id) {
+        const existingMember = members.find(m => m.id === selectedMember.id);
+        if (existingMember && existingMember.is_admin !== selectedMember.is_admin) {
+          if (selectedMember.is_admin) {
+            // Create auth user if they don't have one
+            if (!existingMember.auth_id) {
+              const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+                email: selectedMember.email,
+                email_confirm: true,
+                user_metadata: {
+                  first_name: selectedMember.first_name,
+                  last_name: selectedMember.last_name
+                }
+              });
 
-        // Then insert the new interests
-        const { error: insertError } = await supabase
-          .from('member_interests')
-          .insert(
-            selectedMember.interests.map(interest => ({
-              member_id: selectedMember.id,
-              interest_id: interest.id
-            }))
-          );
+              if (authError) {
+                throw new Error(`Failed to create auth user: ${authError.message}`);
+              }
 
-        if (insertError) throw insertError;
+              selectedMember.auth_id = authData.user.id;
+            }
+          } else {
+            // Remove admin privileges - we'll keep the auth user but they won't have admin access
+            // since the is_admin check in the RPC function will return false
+          }
+        }
+      }
+
+      if (selectedMember.id) {
+        // Update existing member
+        const { error } = await supabase
+          .from('members')
+          .update({
+            first_name: selectedMember.first_name,
+            last_name: selectedMember.last_name,
+            email: selectedMember.email,
+            phone: selectedMember.phone,
+            address: selectedMember.address,
+            city: selectedMember.city,
+            state: selectedMember.state,
+            zip: selectedMember.zip,
+            membership_type: selectedMember.membership_type,
+            status: selectedMember.status,
+            is_admin: selectedMember.is_admin,
+            auth_id: selectedMember.auth_id
+          })
+          .eq('id', selectedMember.id);
+
+        if (error) throw error;
+
+        // Handle admin privileges
+        if (selectedMember.is_admin) {
+          // If admin privileges are granted, ensure a record exists in the admins table
+          const { error: adminError } = await supabase
+            .from('admins')
+            .upsert({ user_id: selectedMember.auth_id }, { onConflict: 'user_id' });
+          if (adminError) throw adminError;
+        } else {
+          // If admin privileges are removed, delete the record from the admins table
+          const { error: adminError } = await supabase
+            .from('admins')
+            .delete()
+            .eq('user_id', selectedMember.auth_id);
+          if (adminError) throw adminError;
+        }
+      } else {
+        // Create new member
+        const { error } = await supabase
+          .from('members')
+          .insert([{
+            first_name: selectedMember.first_name,
+            last_name: selectedMember.last_name,
+            email: selectedMember.email,
+            phone: selectedMember.phone,
+            address: selectedMember.address,
+            city: selectedMember.city,
+            state: selectedMember.state,
+            zip: selectedMember.zip,
+            membership_type: selectedMember.membership_type,
+            status: selectedMember.status,
+            is_admin: selectedMember.is_admin,
+            auth_id: selectedMember.auth_id
+          }]);
+
+        if (error) throw error;
+
+        // If admin privileges are granted, insert a record into the admins table
+        if (selectedMember.is_admin) {
+          const { error: adminError } = await supabase
+            .from('admins')
+            .insert({ user_id: selectedMember.auth_id });
+          if (adminError) throw adminError;
+        }
       }
 
       setAlert({
         type: 'success',
-        message: 'Member updated successfully'
+        message: `Member ${selectedMember.id ? 'updated' : 'created'} successfully`
       });
+
       setIsEditing(false);
+      setIsCreating(false);
       setSelectedMember(null);
-      fetchMembers(); // Refresh the list
+      fetchMembers();
     } catch (error) {
-      console.error('Error updating member:', error);
+      console.error('Error saving member:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to update member'
+        message: error.message || 'Error saving member'
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
