@@ -1108,7 +1108,29 @@ const AdminMembers: React.FC = () => {
             </Button>
             <Button
               variant="primary"
-              onClick={() => setIsCreating(true)}
+              onClick={() => {
+                setSelectedMember({
+                  id: '',
+                  first_name: '',
+                  last_name: '',
+                  email: '',
+                  phone: '',
+                  address: '',
+                  city: '',
+                  state: '',
+                  zip: '',
+                  membership_type: '',
+                  status: 'pending',
+                  is_admin: false,
+                  created_at: new Date().toISOString(),
+                  renewal_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+                  interests: [],
+                  volunteer_hours: [],
+                  meeting_attendance: [],
+                  payments: []
+                });
+                setIsCreating(true);
+              }}
               className="flex items-center"
             >
               <Plus className="h-5 w-5 mr-2" />
