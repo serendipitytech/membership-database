@@ -16,18 +16,27 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="flex flex-col min-h-screen">
       <Header />
       {isAdminPage ? (
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-screen">
           <Sidebar />
-          <main className="flex-1 min-h-0">
-            {children}
-          </main>
+          <div className="flex-1 flex flex-col min-h-0">
+            <main className="flex-1 overflow-auto ml-64 pl-6">
+              {children}
+            </main>
+            <div className="ml-64">
+              <div className="pl-6 -ml-64">
+                <Footer />
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
-        <main className="flex-grow">
-          {children}
-        </main>
+        <>
+          <main className="flex-grow">
+            {children}
+          </main>
+          <Footer />
+        </>
       )}
-      <Footer />
     </div>
   );
 };

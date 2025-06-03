@@ -53,7 +53,7 @@ const Sidebar = () => {
   };
 
   return (
-    <aside className={`h-screen bg-slate-900 flex flex-col transition-all duration-200 ${collapsed ? 'w-20' : 'w-64'}`}>
+    <aside className={`fixed top-0 left-0 h-screen bg-slate-900 flex flex-col transition-all duration-200 ${collapsed ? 'w-20' : 'w-64'}`}>
       <div className="flex items-center h-16 px-4 font-bold text-xl text-white border-b border-slate-800">
         {!collapsed ? 'NW Democrats' : 'NW'}
       </div>
