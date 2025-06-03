@@ -97,30 +97,38 @@ const ActBlueImport: React.FC = () => {
     setShowDropdowns(prev => ({ ...prev, [payment.receiptId]: false }));
   };
 
-  // Handle member creation selection
+  // Handle member creation
   const handleCreateMember = (payment: UnmatchedPayment) => {
     setUnmatchedPayments(prev => prev.map(p => 
       p.receiptId === payment.receiptId 
         ? { ...p, action: 'create' }
         : p
     ));
-    setSelectedPayment(payment);
-    setShowCreateMember(true);
   };
 
   // Handle member creation confirmation
   const handleConfirmCreateMember = async () => {
-    if (!selectedPayment) return;
-    
     try {
-      await createNewMember(selectedPayment);
-      setShowCreateMember(false);
-      setSelectedPayment(null);
+      // Get all payments marked for creation
+      const paymentsToCreate = unmatchedPayments.filter(p => p.action === 'create');
+      
+      // Process each payment
+      for (const payment of paymentsToCreate) {
+        await createNewMember(payment);
+      }
+      
+      setAlert({
+        type: 'success',
+        message: `Successfully created ${paymentsToCreate.length} new members`
+      });
+      
+      // Refresh members list
+      await fetchMembers();
     } catch (error) {
-      console.error('Error creating member:', error);
+      console.error('Error creating members:', error);
       setAlert({
         type: 'error',
-        message: 'Failed to create new member'
+        message: 'Failed to create some members'
       });
     }
   };
@@ -349,13 +357,8 @@ const ActBlueImport: React.FC = () => {
           zip: payment.donorZip,
           status: 'active',
           membership_type: 'individual',
-          join_date: new Date().toISOString(),
-          // Default values for required fields
-          membership_status: 'active',
-          membership_level: 'standard',
-          membership_term: 'annual',
-          membership_start_date: new Date().toISOString(),
-          membership_end_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
+          joined_date: new Date().toISOString(),
+          renewal_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }])
@@ -390,7 +393,17 @@ const ActBlueImport: React.FC = () => {
     <div className="space-y-6">
       <Card>
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Import ActBlue Payments</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Import ActBlue Payments</h2>
+            {unmatchedPayments.length > 0 && (
+              <Button
+                onClick={() => setShowConfirmation(true)}
+                disabled={isProcessing}
+              >
+                Process Payments
+              </Button>
+            )}
+          </div>
           <div className="space-y-4">
             <div className="flex items-center justify-center w-full">
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
@@ -446,17 +459,9 @@ const ActBlueImport: React.FC = () => {
       {unmatchedPayments.length > 0 && (
         <Card>
           <div className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Unmatched Payments ({unmatchedPayments.length})
-              </h2>
-              <Button
-                onClick={() => setShowConfirmation(true)}
-                disabled={isProcessing}
-              >
-                Process Payments
-              </Button>
-            </div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Unmatched Payments ({unmatchedPayments.length})
+            </h2>
             <div className="space-y-4">
               {unmatchedPayments.map((payment) => (
                 <div key={payment.receiptId} className="border rounded-lg p-4">
@@ -533,75 +538,18 @@ const ActBlueImport: React.FC = () => {
                         <Plus className="w-4 h-4 mr-2" />
                         {payment.action === 'create' ? 'Creating Member' : 'Create Member'}
                       </Button>
-                      {payment.action === 'create' && (
-                        <div className="mt-1 text-sm text-blue-600">
-                          Will create new member: {payment.donorFirstName} {payment.donorLastName}
-                        </div>
-                      )}
-                      <Button
-                        variant="secondary"
-                        onClick={() => handleSkipPayment(payment)}
-                        className={payment.action === 'skip' ? 'bg-gray-200' : ''}
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        {payment.action === 'skip' ? 'Skipped' : 'Skip'}
-                      </Button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        </Card>
-      )}
-
-      {showCreateMember && selectedPayment && (
-        <Card>
-          <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Create New Member</h2>
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Create a new member from the payment data:
-              </p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="font-medium">Name:</p>
-                  <p>{selectedPayment.donorFirstName} {selectedPayment.donorLastName}</p>
-                </div>
-                <div>
-                  <p className="font-medium">Email:</p>
-                  <p>{selectedPayment.donorEmail}</p>
-                </div>
-                <div>
-                  <p className="font-medium">Phone:</p>
-                  <p>{selectedPayment.donorPhone}</p>
-                </div>
-                <div>
-                  <p className="font-medium">Address:</p>
-                  <p>
-                    {selectedPayment.donorAddress}<br />
-                    {selectedPayment.donorCity}, {selectedPayment.donorState} {selectedPayment.donorZip}
-                  </p>
-                </div>
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setShowCreateMember(false);
-                    setSelectedPayment(null);
-                    handleSkipPayment(selectedPayment);
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleConfirmCreateMember}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? 'Creating...' : 'Confirm Create'}
-                </Button>
-              </div>
+            <div className="mt-6 flex justify-center">
+              <Button
+                onClick={() => setShowConfirmation(true)}
+                disabled={isProcessing}
+              >
+                Process Payments
+              </Button>
             </div>
           </div>
         </Card>
@@ -613,7 +561,7 @@ const ActBlueImport: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Confirm Payment Processing</h2>
             <div className="space-y-4">
               <p className="text-sm text-gray-600">
-                Please review the following actions before processing:
+                Please review your selections before processing:
               </p>
               <div className="space-y-2">
                 {unmatchedPayments.map(payment => (
@@ -631,7 +579,7 @@ const ActBlueImport: React.FC = () => {
                       {payment.action === 'create' && (
                         <span className="text-blue-600">Create new member</span>
                       )}
-                      {(payment.action === 'skip' || !payment.action) && (
+                      {!payment.action && (
                         <span className="text-gray-500">Will be skipped</span>
                       )}
                     </div>
