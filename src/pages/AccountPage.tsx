@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout/Layout';
 import TextField from '../components/Form/TextField';
+import SelectField from '../components/Form/SelectField';
 import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
 import Badge from '../components/UI/Badge';
 import { User, Edit, X, LogOut } from 'lucide-react';
 import { getCurrentUser, getMemberByEmail, getMemberInterests, getMemberVolunteerHours, getMemberAttendance } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
+import { getPickListValues, PICK_LIST_CATEGORIES } from '../lib/pickLists';
 
 interface MemberData {
   id: string;
@@ -22,13 +24,30 @@ interface MemberData {
   status: string;
   membership_type: string;
   joined_date: string;
+  renewal_date: string;
   is_admin: boolean;
+  is_cell_phone?: boolean;
+  tshirt_size?: string;
+  birthdate?: string;
+  special_skills?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_relationship?: string;
+  health_issues?: string;
+  registration_date?: string;
+  signature?: string;
+  date_of_birth?: string;
+  shirt_size?: string;
+  precinct?: string;
+  voter_id?: string;
+  tell_us_more?: string;
+  terms_accepted?: boolean;
   interests: string[];
   volunteer_hours: Array<{
-  id: string;
-  date: string;
-  hours: number;
-  description: string;
+    id: string;
+    date: string;
+    hours: number;
+    description: string;
   }>;
   attendance: Array<{
     id: string;
@@ -53,6 +72,7 @@ const AccountPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<Partial<MemberData>>({});
   const [availableInterests, setAvailableInterests] = useState<string[]>([]);
+  const [shirtSizes, setShirtSizes] = useState<Array<{value: string, label: string}>>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -88,6 +108,13 @@ const AccountPage: React.FC = () => {
           getMemberAttendance(member.id)
         ]);
         console.log('Additional data:', { interests, volunteerHours, attendance });
+
+        // Fetch shirt sizes
+        const shirtValues = await getPickListValues(PICK_LIST_CATEGORIES.TSHIRT_SIZES);
+        setShirtSizes(shirtValues.map(value => ({
+          value: value.value,
+          label: value.name
+        })));
 
         setMemberData({
           ...member,
@@ -273,91 +300,276 @@ const AccountPage: React.FC = () => {
                 </Button>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="text-lg font-medium text-gray-900 mb-4">Contact Information</h4>
-                {isEditing ? (
-                  <div className="space-y-4">
-                    <TextField
-                      label="Email"
-                      value={memberData?.email || ''}
-                      disabled
-                    />
-                    <TextField
-                      label="Phone"
-                      value={editedData.phone || ''}
-                      onChange={(e) => setEditedData({ ...editedData, phone: e.target.value })}
-                    />
-                    <div className="flex space-x-4">
-                      <Button onClick={handleSave} variant="primary">
-                        Save Changes
-                      </Button>
-                      <Button onClick={handleCancel} variant="secondary">
-                        Cancel
-                      </Button>
+
+            {/* Main Profile Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+              <div className="p-6">
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="h-16 w-16 rounded-full bg-primary-100 flex items-center justify-center">
+                    <User className="h-8 w-8 text-primary-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-semibold text-gray-900">
+                      {memberData?.first_name} {memberData?.last_name}
+                    </h4>
+                    <p className="text-sm text-gray-500">{memberData?.email}</p>
+                    <div className="mt-1">
+                      {getMembershipStatus()}
                     </div>
                   </div>
-                ) : (
-                  <dl className="space-y-4">
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Email</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{memberData?.email}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Phone</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{memberData?.phone || 'Not provided'}</dd>
-                    </div>
-                  </dl>
-                )}
-              </div>
-              
-              <div>
-                <h4 className="text-lg font-medium text-gray-900 mb-4">Address</h4>
-                {isEditing ? (
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Contact Information */}
                   <div className="space-y-4">
-                    <TextField
-                      label="Street Address"
-                      value={editedData.address || ''}
-                      onChange={(e) => setEditedData({ ...editedData, address: e.target.value })}
-                    />
-                    <TextField
-                      label="City"
-                      value={editedData.city || ''}
-                      onChange={(e) => setEditedData({ ...editedData, city: e.target.value })}
-                    />
-                    <TextField
-                      label="State"
-                      value={editedData.state || ''}
-                      onChange={(e) => setEditedData({ ...editedData, state: e.target.value })}
-                    />
-                    <TextField
-                      label="ZIP Code"
-                      value={editedData.zip || ''}
-                      onChange={(e) => setEditedData({ ...editedData, zip: e.target.value })}
-                    />
+                    <h5 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Contact Information</h5>
+                    {isEditing ? (
+                      <div className="space-y-4">
+                        <TextField
+                          label="Phone"
+                          value={editedData.phone || ''}
+                          onChange={(e) => setEditedData({ ...editedData, phone: e.target.value })}
+                        />
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="is_cell_phone"
+                            checked={editedData.is_cell_phone}
+                            onChange={(e) => setEditedData({ ...editedData, is_cell_phone: e.target.checked })}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <label htmlFor="is_cell_phone" className="text-sm text-gray-700">
+                            This is a cell phone number
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <dl className="space-y-3">
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Phone</dt>
+                          <dd className="mt-1 text-sm text-gray-900">
+                            {memberData?.phone || 'Not provided'}
+                            {memberData?.is_cell_phone && <span className="ml-2 text-xs text-gray-500">(Cell)</span>}
+                          </dd>
+                        </div>
+                      </dl>
+                    )}
                   </div>
-                ) : (
-                  <dl className="space-y-4">
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">Street Address</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{memberData?.address || 'Not provided'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">City</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{memberData?.city || 'Not provided'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">State</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{memberData?.state || 'Not provided'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500">ZIP Code</dt>
-                      <dd className="mt-1 text-sm text-gray-900">{memberData?.zip || 'Not provided'}</dd>
-                    </div>
-                  </dl>
-                )}
+
+                  {/* Address Information */}
+                  <div className="space-y-4">
+                    <h5 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Address</h5>
+                    {isEditing ? (
+                      <div className="space-y-4">
+                        <TextField
+                          label="Street Address"
+                          value={editedData.address || ''}
+                          onChange={(e) => setEditedData({ ...editedData, address: e.target.value })}
+                        />
+                        <div className="grid grid-cols-2 gap-4">
+                          <TextField
+                            label="City"
+                            value={editedData.city || ''}
+                            onChange={(e) => setEditedData({ ...editedData, city: e.target.value })}
+                          />
+                          <TextField
+                            label="State"
+                            value={editedData.state || ''}
+                            onChange={(e) => setEditedData({ ...editedData, state: e.target.value })}
+                          />
+                        </div>
+                        <TextField
+                          label="ZIP Code"
+                          value={editedData.zip || ''}
+                          onChange={(e) => setEditedData({ ...editedData, zip: e.target.value })}
+                        />
+                      </div>
+                    ) : (
+                      <dl className="space-y-3">
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Street Address</dt>
+                          <dd className="mt-1 text-sm text-gray-900">{memberData?.address || 'Not provided'}</dd>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <dt className="text-sm font-medium text-gray-500">City</dt>
+                            <dd className="mt-1 text-sm text-gray-900">{memberData?.city || 'Not provided'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-sm font-medium text-gray-500">State</dt>
+                            <dd className="mt-1 text-sm text-gray-900">{memberData?.state || 'Not provided'}</dd>
+                          </div>
+                        </div>
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">ZIP Code</dt>
+                          <dd className="mt-1 text-sm text-gray-900">{memberData?.zip || 'Not provided'}</dd>
+                        </div>
+                      </dl>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* Additional Information Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Personal Information Card */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="p-6">
+                  <h5 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Personal Information</h5>
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <TextField
+                          label="Birthdate"
+                          type="date"
+                          value={editedData.birthdate || ''}
+                          onChange={(e) => setEditedData({ ...editedData, birthdate: e.target.value })}
+                        />
+                        <SelectField
+                          label="T-Shirt Size"
+                          value={editedData.tshirt_size || ''}
+                          onChange={(e) => setEditedData({ ...editedData, tshirt_size: e.target.value })}
+                          options={[
+                            { value: '', label: 'Select size' },
+                            ...shirtSizes
+                          ]}
+                        />
+                      </div>
+                      <TextField
+                        label="Special Skills"
+                        value={editedData.special_skills || ''}
+                        onChange={(e) => setEditedData({ ...editedData, special_skills: e.target.value })}
+                        multiline
+                      />
+                      <TextField
+                        label="Health Issues"
+                        value={editedData.health_issues || ''}
+                        onChange={(e) => setEditedData({ ...editedData, health_issues: e.target.value })}
+                        multiline
+                      />
+                      <TextField
+                        label="Tell Us More"
+                        value={editedData.tell_us_more || ''}
+                        onChange={(e) => setEditedData({ ...editedData, tell_us_more: e.target.value })}
+                        multiline
+                      />
+                    </div>
+                  ) : (
+                    <dl className="space-y-3">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Birthdate</dt>
+                          <dd className="mt-1 text-sm text-gray-900">
+                            {memberData?.birthdate ? new Date(memberData.birthdate).toLocaleDateString() : 'Not provided'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">T-Shirt Size</dt>
+                          <dd className="mt-1 text-sm text-gray-900">{memberData?.tshirt_size || 'Not provided'}</dd>
+                        </div>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Special Skills</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.special_skills || 'Not provided'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Health Issues</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.health_issues || 'Not provided'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Tell Us More</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.tell_us_more || 'Not provided'}</dd>
+                      </div>
+                    </dl>
+                  )}
+                </div>
+              </div>
+
+              {/* Emergency Contact Card */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="p-6">
+                  <h5 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Emergency Contact</h5>
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      <TextField
+                        label="Emergency Contact Name"
+                        value={editedData.emergency_contact_name || ''}
+                        onChange={(e) => setEditedData({ ...editedData, emergency_contact_name: e.target.value })}
+                      />
+                      <TextField
+                        label="Emergency Contact Phone"
+                        value={editedData.emergency_contact_phone || ''}
+                        onChange={(e) => setEditedData({ ...editedData, emergency_contact_phone: e.target.value })}
+                      />
+                      <TextField
+                        label="Relationship"
+                        value={editedData.emergency_contact_relationship || ''}
+                        onChange={(e) => setEditedData({ ...editedData, emergency_contact_relationship: e.target.value })}
+                      />
+                    </div>
+                  ) : (
+                    <dl className="space-y-3">
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Emergency Contact Name</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.emergency_contact_name || 'Not provided'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Emergency Contact Phone</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.emergency_contact_phone || 'Not provided'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Relationship</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.emergency_contact_relationship || 'Not provided'}</dd>
+                      </div>
+                    </dl>
+                  )}
+                </div>
+              </div>
+
+              {/* Voting Information Card */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="p-6">
+                  <h5 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Voting Information</h5>
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      <TextField
+                        label="Precinct"
+                        value={editedData.precinct || ''}
+                        onChange={(e) => setEditedData({ ...editedData, precinct: e.target.value })}
+                      />
+                      <TextField
+                        label="Voter ID"
+                        value={editedData.voter_id || ''}
+                        onChange={(e) => setEditedData({ ...editedData, voter_id: e.target.value })}
+                      />
+                    </div>
+                  ) : (
+                    <dl className="space-y-3">
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Precinct</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.precinct || 'Not provided'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Voter ID</dt>
+                        <dd className="mt-1 text-sm text-gray-900">{memberData?.voter_id || 'Not provided'}</dd>
+                      </div>
+                    </dl>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {isEditing && (
+              <div className="mt-6 flex justify-end space-x-4">
+                <Button onClick={handleCancel} variant="secondary">
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} variant="primary">
+                  Save Changes
+                </Button>
+              </div>
+            )}
           </div>
         );
 
