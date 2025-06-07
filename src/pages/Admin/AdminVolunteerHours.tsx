@@ -10,6 +10,8 @@ import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { Event, EventWithAttendance, EventType, EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_TYPE_COLORS } from '../../types/event';
+import { formatDate } from '../../utils/formatters';
+import DataTable from '../../components/UI/DataTable';
 
 const timeZone = 'America/New_York';
 
@@ -349,6 +351,53 @@ const AdminVolunteerHours: React.FC = () => {
     }
   };
 
+  const columns = [
+    {
+      header: 'Member',
+      accessor: (row: VolunteerHours) => `${row.members?.first_name} ${row.members?.last_name}`,
+      sortable: true
+    },
+    {
+      header: 'Event',
+      accessor: 'events.title',
+      sortable: true
+    },
+    {
+      header: 'Total Hours',
+      accessor: 'hours',
+      sortable: true,
+      render: (value: number) => value.toFixed(1)
+    },
+    {
+      header: 'Event Date',
+      accessor: 'events.date',
+      sortable: true,
+      render: (value: string) => formatDate(value)
+    },
+    {
+      header: 'Actions',
+      accessor: 'id',
+      render: (value: string) => (
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleEdit(volunteerHours.find(h => h.id === value) as VolunteerHours)}
+            className="text-primary-600 hover:text-primary-900"
+            title="Edit hours"
+          >
+            <Edit2 className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => handleDelete(cumulativeHours.find(h => h.member_id === value && h.event_id === value) as CumulativeHours)}
+            className="text-red-600 hover:text-red-900"
+            title="Delete hours"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
   if (isLoading) {
     return (
       <Layout>
@@ -446,65 +495,13 @@ const AdminVolunteerHours: React.FC = () => {
         <Card>
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Volunteer Hours</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Member
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Event
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total Hours
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Event Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {cumulativeHours.map((record) => (
-                    <tr key={`${record.member_id}-${record.event_id}`}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {record.member ? `${record.member.first_name} ${record.member.last_name}` : 'Unknown'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {record.event ? record.event.title : 'Unknown'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {record.total_hours}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {record.event ? format(utcToZonedTime(parseISO(record.event.date), timeZone), 'MMM d, yyyy') : 'Unknown'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleEdit(record)}
-                            className="text-primary-600 hover:text-primary-900"
-                            title="Edit hours"
-                          >
-                            <Edit2 className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(record)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Delete hours"
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={columns}
+              data={volunteerHours}
+              searchable={true}
+              searchPlaceholder="Search volunteer hours..."
+              className="bg-white shadow rounded-lg"
+            />
           </div>
         </Card>
 

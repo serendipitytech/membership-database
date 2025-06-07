@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../../components/Layout/Layout';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
-import { Search, Plus, Download, Edit2, Trash2 } from 'lucide-react';
+import { Search, Plus, Download, Edit2, Trash2, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
@@ -37,10 +37,20 @@ interface Payment {
   };
 }
 
+interface MemberPayment {
+  member_id: string;
+  member: Member;
+  total_amount: number;
+  last_payment_date: string;
+  last_payment_method: string;
+  is_recurring: boolean;
+  payment_count: number;
+}
+
 const AdminPayments: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [selectedMember, setSelectedMember] = useState<string>('');
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [amount, setAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentMethods, setPaymentMethods] = useState<Array<{value: string, label: string}>>([]);
@@ -50,6 +60,8 @@ const AdminPayments: React.FC = () => {
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [memberTransactions, setMemberTransactions] = useState<Payment[]>([]);
 
   useEffect(() => {
     fetchMembers();
@@ -145,7 +157,7 @@ const AdminPayments: React.FC = () => {
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .insert([{
-          member_id: selectedMember,
+          member_id: selectedMember.id,
           amount: parseFloat(amount),
           date: paymentDate,
           payment_method: paymentMethod,
@@ -164,7 +176,7 @@ const AdminPayments: React.FC = () => {
           status: 'active',
           renewal_date: expirationDate
         })
-        .eq('id', selectedMember);
+        .eq('id', selectedMember.id);
 
       if (memberError) throw memberError;
 
@@ -177,7 +189,7 @@ const AdminPayments: React.FC = () => {
       });
 
       // Reset form
-      setSelectedMember('');
+      setSelectedMember(null);
       setAmount('');
       setPaymentMethod('');
       setNotes('');
@@ -194,7 +206,7 @@ const AdminPayments: React.FC = () => {
 
   const handleEdit = (payment: Payment) => {
     setEditingPayment(payment);
-    setSelectedMember(payment.member_id);
+    setSelectedMember(payment.member);
     setAmount(payment.amount.toString());
     setPaymentMethod(payment.payment_method);
     setNotes(payment.notes || '');
@@ -245,7 +257,7 @@ const AdminPayments: React.FC = () => {
       const { error } = await supabase
         .from('payments')
         .update({
-          member_id: selectedMember,
+          member_id: selectedMember.id,
           amount: parseFloat(amount),
           date: paymentDate,
           payment_method: paymentMethod,
@@ -265,7 +277,7 @@ const AdminPayments: React.FC = () => {
 
       // Reset form and editing state
       setEditingPayment(null);
-      setSelectedMember('');
+      setSelectedMember(null);
       setAmount('');
       setPaymentMethod('');
       setNotes('');
@@ -315,17 +327,145 @@ const AdminPayments: React.FC = () => {
       .join(' ');
   };
 
+  const handleViewMemberPayments = (memberId: string) => {
+    const member = payments.find(p => p.member_id === memberId)?.member;
+    if (member) {
+      setSelectedMember(member);
+      setMemberTransactions(payments.filter(p => p.member_id === memberId));
+      setShowTransactionModal(true);
+    }
+  };
+
+  const handleEditPayment = (payment: Payment) => {
+    // Implement edit payment logic
+    console.log('Edit payment:', payment);
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .delete()
+        .eq('id', paymentId);
+
+      if (error) throw error;
+
+      setPayments(prev => prev.filter(p => p.id !== paymentId));
+      setMemberTransactions(prev => prev.filter(p => p.id !== paymentId));
+      setAlert({
+        type: 'success',
+        message: 'Payment deleted successfully'
+      });
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to delete payment'
+      });
+    }
+  };
+
+  // Group payments by member
+  const memberPayments = useMemo(() => {
+    // First, sort payments by date to ensure we get the most recent payment info
+    const sortedPayments = [...payments].sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    // Group by member_id
+    const grouped = sortedPayments.reduce((acc: { [key: string]: MemberPayment }, payment) => {
+      const memberId = payment.member_id;
+      
+      if (!acc[memberId]) {
+        // Initialize member payment record
+        acc[memberId] = {
+          member_id: memberId,
+          member: payment.member,
+          total_amount: payment.amount,
+          last_payment_date: payment.date,
+          last_payment_method: payment.payment_method,
+          is_recurring: payment.is_recurring,
+          payment_count: 1
+        };
+      } else {
+        // Update existing member payment record
+        acc[memberId].total_amount += payment.amount;
+        acc[memberId].payment_count += 1;
+        
+        // Since payments are sorted by date, the first payment we see for each member
+        // is their most recent payment
+        if (acc[memberId].last_payment_date === payment.date) {
+          acc[memberId].last_payment_method = payment.payment_method;
+          acc[memberId].is_recurring = payment.is_recurring;
+        }
+      }
+      
+      return acc;
+    }, {});
+    
+    // Convert to array and sort by member name
+    return Object.values(grouped).sort((a, b) => 
+      `${a.member.first_name} ${a.member.last_name}`.localeCompare(`${b.member.first_name} ${b.member.last_name}`)
+    );
+  }, [payments]);
+
   const columns = [
+    {
+      header: 'Member',
+      accessor: (row: MemberPayment) => `${row.member.first_name} ${row.member.last_name}`,
+      sortable: true
+    },
+    {
+      header: 'Total Contributions',
+      accessor: 'total_amount',
+      sortable: true,
+      render: (value: number) => formatCurrency(value)
+    },
+    {
+      header: 'Payment Count',
+      accessor: 'payment_count',
+      sortable: true
+    },
+    {
+      header: 'Last Payment',
+      accessor: 'last_payment_date',
+      sortable: true,
+      render: (value: string) => formatDate(value)
+    },
+    {
+      header: 'Payment Method',
+      accessor: 'last_payment_method',
+      sortable: true
+    },
+    {
+      header: 'Recurring',
+      accessor: 'is_recurring',
+      sortable: true,
+      render: (value: boolean) => value ? 'Yes' : 'No'
+    },
+    {
+      header: 'Actions',
+      accessor: 'member_id',
+      render: (value: string) => (
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleViewMemberPayments(value)}
+            className="text-primary-600 hover:text-primary-900"
+            title="View payment history"
+          >
+            <Edit2 className="h-5 w-5" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  const transactionColumns = [
     {
       header: 'Date',
       accessor: 'date',
       sortable: true,
       render: (value: string) => formatDate(value)
-    },
-    {
-      header: 'Member',
-      accessor: (row: Payment) => `${row.member.first_name} ${row.member.last_name}`,
-      sortable: true
     },
     {
       header: 'Amount',
@@ -336,11 +476,6 @@ const AdminPayments: React.FC = () => {
     {
       header: 'Method',
       accessor: 'payment_method',
-      sortable: true
-    },
-    {
-      header: 'Status',
-      accessor: 'status',
       sortable: true
     },
     {
@@ -356,17 +491,17 @@ const AdminPayments: React.FC = () => {
     {
       header: 'Actions',
       accessor: 'id',
-      render: (value: string) => (
+      render: (value: string, row: Payment) => (
         <div className="flex space-x-2">
           <button
-            onClick={() => handleEdit(payments.find(p => p.id === value) as Payment)}
+            onClick={() => handleEditPayment(row)}
             className="text-primary-600 hover:text-primary-900"
             title="Edit payment"
           >
             <Edit2 className="h-5 w-5" />
           </button>
           <button
-            onClick={() => handleDelete(value)}
+            onClick={() => handleDeletePayment(value)}
             className="text-red-600 hover:text-red-900"
             title="Delete payment"
           >
@@ -426,8 +561,8 @@ const AdminPayments: React.FC = () => {
               <div className="col-span-3">
                 <SelectField
                   label="Member"
-                  value={selectedMember}
-                  onChange={(e) => setSelectedMember(e.target.value)}
+                  value={selectedMember?.id || ''}
+                  onChange={(e) => setSelectedMember(members.find(m => m.id === e.target.value) || null)}
                   options={members.map(member => ({
                     value: member.id,
                     label: `${member.first_name} ${member.last_name}`
@@ -494,7 +629,7 @@ const AdminPayments: React.FC = () => {
                     variant="outline"
                     onClick={() => {
                       setEditingPayment(null);
-                      setSelectedMember('');
+                      setSelectedMember(null);
                       setAmount('');
                       setPaymentMethod('');
                       setNotes('');
@@ -516,16 +651,47 @@ const AdminPayments: React.FC = () => {
 
         <Card>
           <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Payments</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Member Contributions</h2>
             <DataTable
               columns={columns}
-              data={payments}
+              data={memberPayments}
               searchable={true}
-              searchPlaceholder="Search payments..."
+              searchPlaceholder="Search members..."
               className="bg-white shadow rounded-lg"
             />
           </div>
         </Card>
+
+        {/* Transaction List Modal */}
+        {showTransactionModal && selectedMember && (
+          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg w-[90vw] max-w-6xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">
+                    Payment History - {selectedMember.first_name} {selectedMember.last_name}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowTransactionModal(false);
+                      setSelectedMember(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+                <DataTable
+                  columns={transactionColumns}
+                  data={memberTransactions}
+                  searchable={true}
+                  searchPlaceholder="Search transactions..."
+                  className="bg-white"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, ChangeEvent } from 'react';
-import { Search, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Column<T> {
   header: string;
@@ -14,6 +14,7 @@ interface DataTableProps<T> {
   searchable?: boolean;
   searchPlaceholder?: string;
   className?: string;
+  pageSize?: number;
 }
 
 function DataTable<T extends Record<string, any>>({
@@ -21,95 +22,90 @@ function DataTable<T extends Record<string, any>>({
   data,
   searchable = true,
   searchPlaceholder = 'Search...',
-  className = ''
+  className = '',
+  pageSize = 20
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{
-    key: keyof T | ((row: T) => string | number);
+    key: string | null;
     direction: 'asc' | 'desc';
-  } | null>(null);
+  }>({ key: null, direction: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(pageSize);
 
-  // Filter data based on search term
   const filteredData = useMemo(() => {
-    if (!searchTerm) return data;
-
-    return data.filter(row => {
-      return columns.some(column => {
-        const value = typeof column.accessor === 'function'
-          ? column.accessor(row)
-          : row[column.accessor];
-
-        if (value === null || value === undefined) return false;
-        
-        // Handle nested objects
-        if (typeof value === 'object') {
-          return Object.values(value).some(nestedValue => 
-            String(nestedValue).toLowerCase().includes(searchTerm.toLowerCase())
-          );
-        }
-
-        return String(value).toLowerCase().includes(searchTerm.toLowerCase());
-      });
+    return data.filter((row) => {
+      return Object.values(row).some((value) =>
+        String(value).toLowerCase().includes(searchTerm.toLowerCase())
+      );
     });
-  }, [data, searchTerm, columns]);
+  }, [data, searchTerm]);
 
-  // Sort data based on sort configuration
   const sortedData = useMemo(() => {
-    if (!sortConfig) return filteredData;
+    if (!sortConfig.key) return filteredData;
 
     return [...filteredData].sort((a, b) => {
-      const aValue = typeof sortConfig.key === 'function' 
-        ? sortConfig.key(a)
-        : a[sortConfig.key];
-      const bValue = typeof sortConfig.key === 'function'
-        ? sortConfig.key(b)
-        : b[sortConfig.key];
+      const aValue = typeof columns[0].accessor === 'function'
+        ? columns[0].accessor(a)
+        : a[columns[0].accessor as keyof T];
+      const bValue = typeof columns[0].accessor === 'function'
+        ? columns[0].accessor(b)
+        : b[columns[0].accessor as keyof T];
 
-      if (aValue === bValue) return 0;
-      if (aValue === null || aValue === undefined) return 1;
-      if (bValue === null || bValue === undefined) return -1;
-
-      // Handle nested objects
-      if (typeof aValue === 'object' && typeof bValue === 'object') {
-        const aString = JSON.stringify(aValue);
-        const bString = JSON.stringify(bValue);
-        const comparison = aString < bString ? -1 : 1;
-        return sortConfig.direction === 'asc' ? comparison : -comparison;
-      }
-
-      const comparison = aValue < bValue ? -1 : 1;
-      return sortConfig.direction === 'asc' ? comparison : -comparison;
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
     });
-  }, [filteredData, sortConfig]);
+  }, [filteredData, sortConfig, columns]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return sortedData.slice(startIndex, startIndex + rowsPerPage);
+  }, [sortedData, currentPage, rowsPerPage]);
+
+  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
 
   const handleSort = (column: Column<T>) => {
-    // Make all columns sortable by default
-    setSortConfig((current: { key: keyof T | ((row: T) => string | number); direction: 'asc' | 'desc'; } | null) => {
-      if (!current || current.key !== column.accessor) {
-        return { key: column.accessor, direction: 'asc' };
+    setSortConfig((current) => {
+      if (current.key === column.header) {
+        return {
+          key: column.header,
+          direction: current.direction === 'asc' ? 'desc' : 'asc',
+        };
       }
-      if (current.direction === 'asc') {
-        return { key: column.accessor, direction: 'desc' };
-      }
-      return null;
+      return {
+        key: column.header,
+        direction: 'asc',
+      };
     });
   };
 
   const renderSortIcon = (column: Column<T>) => {
-    // Make all columns sortable by default
-    if (!sortConfig || sortConfig.key !== column.accessor) {
-      return <ChevronUp className="h-4 w-4 opacity-0 group-hover:opacity-50" />;
+    if (!column.sortable) return null;
+    if (sortConfig.key !== column.header) {
+      return <ChevronUp className="h-4 w-4 text-gray-400" />;
     }
-    return sortConfig.direction === 'asc' 
-      ? <ChevronUp className="h-4 w-4" />
-      : <ChevronDown className="h-4 w-4" />;
+    return sortConfig.direction === 'asc' ? (
+      <ChevronUp className="h-4 w-4 text-gray-900" />
+    ) : (
+      <ChevronDown className="h-4 w-4 text-gray-900" />
+    );
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
+  const handleRowsPerPageChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    setRowsPerPage(Number(e.target.value));
+    setCurrentPage(1); // Reset to first page when changing rows per page
   };
 
   return (
     <div className={className}>
-      {searchable && (
-        <div className="mb-4">
-          <div className="relative">
+      <div className="flex justify-between items-center mb-4">
+        {searchable && (
+          <div className="relative w-64">
             <input
               type="text"
               placeholder={searchPlaceholder}
@@ -119,8 +115,21 @@ function DataTable<T extends Record<string, any>>({
             />
             <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
           </div>
+        )}
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-700">Rows per page:</span>
+          <select
+            value={rowsPerPage}
+            onChange={handleRowsPerPageChange}
+            className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          >
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={200}>200</option>
+          </select>
         </div>
-      )}
+      </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
@@ -141,7 +150,7 @@ function DataTable<T extends Record<string, any>>({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {sortedData.map((row, rowIndex) => (
+            {paginatedData.map((row, rowIndex) => (
               <tr key={rowIndex} className="hover:bg-gray-50">
                 {columns.map((column, colIndex) => (
                   <td key={colIndex} className="px-6 py-4 whitespace-nowrap">
@@ -161,6 +170,32 @@ function DataTable<T extends Record<string, any>>({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-between mt-4">
+        <div className="text-sm text-gray-700">
+          Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, sortedData.length)} of {sortedData.length} entries
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="p-2 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <span className="text-sm text-gray-700">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="p-2 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>
   );

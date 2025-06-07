@@ -10,6 +10,9 @@ import { format, parseISO, parse } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import * as XLSX from 'xlsx';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
+import SelectField from '../../components/Form/SelectField';
+import TextField from '../../components/Form/TextField';
+import DataTable from '../../components/UI/DataTable';
 
 const timeZone = 'America/New_York';
 
@@ -867,6 +870,57 @@ const AdminImports: React.FC = () => {
     setIsConfirmationModalOpen(false);
   };
 
+  const previewColumns = [
+    ...MEMBER_FIELDS.map(field => ({
+      header: field.label,
+      accessor: (row: any) => {
+        const sourceField = importPreview.mapping.sourceFields[field.id];
+        const sourceIndex = importPreview.headers.indexOf(sourceField);
+        const value = sourceIndex !== -1 ? row[sourceIndex] : '';
+        
+        // Apply transformations for preview
+        let displayValue = value;
+        if (field.id === 'phone' || field.id === 'emergency_contact_phone') {
+          displayValue = value ? value.replace(/\D/g, '') : '';
+        } else if (field.id === 'date_of_birth' && value) {
+          for (const format of TRANSFORMATION_TYPES.DATE.formats) {
+            try {
+              const date = parse(value, format.value, new Date());
+              displayValue = format(date, 'yyyy-MM-dd');
+              break;
+            } catch (e) {
+              continue;
+            }
+          }
+        } else if (field.id === 'tshirt_size' && value) {
+          const validSizes = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+          displayValue = validSizes.includes(value.toUpperCase()) ? value.toUpperCase() : value;
+        }
+        
+        return displayValue;
+      },
+      sortable: true
+    }))
+  ];
+
+  const comparisonColumns = [
+    {
+      header: 'Field',
+      accessor: 'label',
+      sortable: true
+    },
+    {
+      header: 'Imported',
+      accessor: 'imported',
+      sortable: true
+    },
+    {
+      header: 'Existing',
+      accessor: 'existing',
+      sortable: true
+    }
+  ];
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -1198,53 +1252,13 @@ const AdminImports: React.FC = () => {
               <div className="mt-6">
                 <h4 className="font-medium mb-2">Preview</h4>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        {MEMBER_FIELDS.map(field => (
-                          <th key={field.id} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            {field.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {importPreview.sampleRows.map((row, rowIndex) => (
-                        <tr key={rowIndex}>
-                          {MEMBER_FIELDS.map(field => {
-                            const sourceField = importPreview.mapping.sourceFields[field.id];
-                            const sourceIndex = importPreview.headers.indexOf(sourceField);
-                            const value = sourceIndex !== -1 ? row[sourceIndex] : '';
-                            
-                            // Apply transformations for preview
-                            let displayValue = value;
-                            if (field.id === 'phone' || field.id === 'emergency_contact_phone') {
-                              displayValue = value ? value.replace(/\D/g, '') : '';
-                            } else if (field.id === 'date_of_birth' && value) {
-                              for (const format of TRANSFORMATION_TYPES.DATE.formats) {
-                                try {
-                                  const date = parse(value, format.value, new Date());
-                                  displayValue = format(date, 'yyyy-MM-dd');
-                                  break;
-                                } catch (e) {
-                                  continue;
-                                }
-                              }
-                            } else if (field.id === 'tshirt_size' && value) {
-                              const validSizes = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
-                              displayValue = validSizes.includes(value.toUpperCase()) ? value.toUpperCase() : value;
-                            }
-                            
-                            return (
-                              <td key={field.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {displayValue}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <DataTable
+                    columns={previewColumns}
+                    data={importPreview.sampleRows.map((row, index) => ({ ...row, id: index }))}
+                    searchable={true}
+                    searchPlaceholder="Search preview data..."
+                    className="bg-white shadow rounded-lg"
+                  />
                 </div>
               </div>
 
