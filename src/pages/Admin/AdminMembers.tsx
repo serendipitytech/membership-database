@@ -452,34 +452,40 @@ const AdminMembers: React.FC = () => {
 
       if (selectedMember.id) {
         // Update existing member
+        const updateData = {
+          first_name: selectedMember.first_name,
+          last_name: selectedMember.last_name,
+          email: selectedMember.email,
+          phone: selectedMember.phone,
+          address: selectedMember.address,
+          city: selectedMember.city,
+          state: selectedMember.state,
+          zip: selectedMember.zip,
+          membership_type: selectedMember.membership_type,
+          status: selectedMember.status,
+          is_admin: selectedMember.is_admin
+        };
+
+        // Only include auth_id if it's not null
+        if (selectedMember.auth_id) {
+          updateData.auth_id = selectedMember.auth_id;
+        }
+
         const { error } = await supabase
           .from('members')
-          .update({
-            first_name: selectedMember.first_name,
-            last_name: selectedMember.last_name,
-            email: selectedMember.email,
-            phone: selectedMember.phone,
-            address: selectedMember.address,
-            city: selectedMember.city,
-            state: selectedMember.state,
-            zip: selectedMember.zip,
-            membership_type: selectedMember.membership_type,
-            status: selectedMember.status,
-            is_admin: selectedMember.is_admin,
-            auth_id: selectedMember.auth_id
-          })
+          .update(updateData)
           .eq('id', selectedMember.id);
 
         if (error) throw error;
 
         // Handle admin privileges
-        if (selectedMember.is_admin) {
+        if (selectedMember.is_admin && selectedMember.auth_id) {
           // If admin privileges are granted, ensure a record exists in the admins table
           const { error: adminError } = await supabase
             .from('admins')
             .upsert({ user_id: selectedMember.auth_id }, { onConflict: 'user_id' });
           if (adminError) throw adminError;
-        } else {
+        } else if (!selectedMember.is_admin && selectedMember.auth_id) {
           // If admin privileges are removed, delete the record from the admins table
           const { error: adminError } = await supabase
             .from('admins')
@@ -489,27 +495,33 @@ const AdminMembers: React.FC = () => {
         }
       } else {
         // Create new member
+        const insertData = {
+          first_name: selectedMember.first_name,
+          last_name: selectedMember.last_name,
+          email: selectedMember.email,
+          phone: selectedMember.phone,
+          address: selectedMember.address,
+          city: selectedMember.city,
+          state: selectedMember.state,
+          zip: selectedMember.zip,
+          membership_type: selectedMember.membership_type,
+          status: selectedMember.status,
+          is_admin: selectedMember.is_admin
+        };
+
+        // Only include auth_id if it's not null
+        if (selectedMember.auth_id) {
+          insertData.auth_id = selectedMember.auth_id;
+        }
+
         const { error } = await supabase
           .from('members')
-          .insert([{
-            first_name: selectedMember.first_name,
-            last_name: selectedMember.last_name,
-            email: selectedMember.email,
-            phone: selectedMember.phone,
-            address: selectedMember.address,
-            city: selectedMember.city,
-            state: selectedMember.state,
-            zip: selectedMember.zip,
-            membership_type: selectedMember.membership_type,
-            status: selectedMember.status,
-            is_admin: selectedMember.is_admin,
-            auth_id: selectedMember.auth_id
-          }]);
+          .insert([insertData]);
 
         if (error) throw error;
 
-        // If admin privileges are granted, insert a record into the admins table
-        if (selectedMember.is_admin) {
+        // If admin privileges are granted and we have an auth_id, insert a record into the admins table
+        if (selectedMember.is_admin && selectedMember.auth_id) {
           const { error: adminError } = await supabase
             .from('admins')
             .insert({ user_id: selectedMember.auth_id });
