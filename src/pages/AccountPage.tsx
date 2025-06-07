@@ -42,7 +42,14 @@ interface MemberData {
   voter_id?: string;
   tell_us_more?: string;
   terms_accepted?: boolean;
-  interests: string[];
+  interests: Array<{
+    id: string;
+    name: string;
+    category: {
+      id: string;
+      name: string;
+    };
+  }>;
   volunteer_hours: Array<{
     id: string;
     date: string;
@@ -71,7 +78,7 @@ const AccountPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'interests' | 'volunteer' | 'attendance'>('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<Partial<MemberData>>({});
-  const [availableInterests, setAvailableInterests] = useState<string[]>([]);
+  const [availableInterests, setAvailableInterests] = useState<Array<{ id: string; name: string; category: { id: string; name: string; } }>>([]);
   const [shirtSizes, setShirtSizes] = useState<Array<{value: string, label: string}>>([]);
   const navigate = useNavigate();
 
@@ -144,12 +151,23 @@ const AccountPage: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('interests')
-        .select('name')
+        .select(`
+          id,
+          name,
+          category:interest_categories (
+            id,
+            name
+          )
+        `)
         .order('name');
 
       if (error) throw error;
 
-      setAvailableInterests(data.map(interest => interest.name));
+      setAvailableInterests(data.map(interest => ({
+        id: interest.id,
+        name: interest.name,
+        category: interest.category
+      })));
     } catch (error) {
       console.error('Error fetching interests:', error);
       setAlert({
@@ -202,14 +220,6 @@ const AccountPage: React.FC = () => {
 
         if (error) throw error;
       } else if (activeTab === 'interests') {
-        // First, get the interest IDs for the selected interest names
-        const { data: interestsData, error: interestsError } = await supabase
-          .from('interests')
-          .select('id, name')
-          .in('name', editedData.interests || []);
-
-        if (interestsError) throw interestsError;
-
         // Delete existing interests
         const { error: deleteError } = await supabase
           .from('member_interests')
@@ -218,12 +228,12 @@ const AccountPage: React.FC = () => {
 
         if (deleteError) throw deleteError;
 
-        // Insert new interests using interest IDs
-        if (interestsData && interestsData.length > 0) {
+        // Insert new interests
+        if (editedData.interests && editedData.interests.length > 0) {
           const { error: insertError } = await supabase
             .from('member_interests')
             .insert(
-              interestsData.map(interest => ({
+              editedData.interests.map(interest => ({
                 member_id: memberData?.id,
                 interest_id: interest.id
               }))
@@ -253,16 +263,16 @@ const AccountPage: React.FC = () => {
     setEditedData({});
   };
 
-  const toggleInterest = (interest: string) => {
+  const toggleInterest = (interest: { id: string; name: string; category: { id: string; name: string; } }) => {
     if (!editedData.interests) {
       setEditedData({ ...editedData, interests: [interest] });
       return;
     }
 
-    if (editedData.interests.includes(interest)) {
+    if (editedData.interests.some(i => i.id === interest.id)) {
       setEditedData({
         ...editedData,
-        interests: editedData.interests.filter(i => i !== interest)
+        interests: editedData.interests.filter(i => i.id !== interest.id)
       });
     } else {
       setEditedData({
@@ -590,15 +600,15 @@ const AccountPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {availableInterests.map((interest) => (
                     <div
-                      key={interest}
+                      key={interest.id}
                       className={`p-4 rounded-lg cursor-pointer transition-colors ${
-                        editedData.interests?.includes(interest)
+                        editedData.interests?.some(i => i.id === interest.id)
                           ? 'bg-primary-100 border-2 border-primary-500'
                           : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
                       }`}
                       onClick={() => toggleInterest(interest)}
                     >
-                      <h4 className="font-medium text-gray-900">{interest}</h4>
+                      <h4 className="font-medium text-gray-900">{interest.name}</h4>
                     </div>
                   ))}
                 </div>
@@ -616,8 +626,8 @@ const AccountPage: React.FC = () => {
                 {memberData?.interests.length ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {memberData.interests.map((interest) => (
-                      <div key={interest} className="bg-gray-50 p-4 rounded-lg">
-                        <h4 className="font-medium text-gray-900">{interest}</h4>
+                      <div key={interest.id} className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-gray-900">{interest.name}</h4>
                       </div>
                     ))}
                   </div>

@@ -125,12 +125,24 @@ export const getMemberInterests = async (memberId: string) => {
     .select(`
       interest_id,
       interests (
-        name
+        id,
+        name,
+        category:interest_categories (
+          id,
+          name
+        )
       )
     `)
     .eq('member_id', memberId);
   
-  return { interests: data?.map(i => i.interests.name) || [], error };
+  return { 
+    interests: data?.map(i => ({
+      id: i.interests.id,
+      name: i.interests.name,
+      category: i.interests.category
+    })) || [], 
+    error 
+  };
 };
 
 export const updateMemberInterests = async (memberId: string, interestIds: string[]) => {

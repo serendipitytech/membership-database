@@ -478,6 +478,12 @@ const AdminMembers: React.FC = () => {
 
         if (error) throw error;
 
+        // Update member interests
+        await updateMemberInterests(
+          selectedMember.id,
+          selectedMember.interests.map(interest => interest.id)
+        );
+
         // Handle admin privileges
         if (selectedMember.is_admin && selectedMember.auth_id) {
           // If admin privileges are granted, ensure a record exists in the admins table
@@ -514,11 +520,21 @@ const AdminMembers: React.FC = () => {
           insertData.auth_id = selectedMember.auth_id;
         }
 
-        const { error } = await supabase
+        const { data: newMember, error } = await supabase
           .from('members')
-          .insert([insertData]);
+          .insert([insertData])
+          .select()
+          .single();
 
         if (error) throw error;
+
+        // Add member interests
+        if (newMember && selectedMember.interests.length > 0) {
+          await updateMemberInterests(
+            newMember.id,
+            selectedMember.interests.map(interest => interest.id)
+          );
+        }
 
         // If admin privileges are granted and we have an auth_id, insert a record into the admins table
         if (selectedMember.is_admin && selectedMember.auth_id) {
@@ -992,7 +1008,7 @@ const AdminMembers: React.FC = () => {
 
     // Interest filter
     const matchesInterests = selectedInterests.length === 0 || 
-      selectedInterests.every(interestId => 
+      selectedInterests.some(interestId => 
         member.interests.some(interest => interest.id === interestId)
       );
 
