@@ -7,11 +7,12 @@ import Alert from '../../components/UI/Alert';
 import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
 import CheckboxGroup from '../../components/Form/CheckboxGroup';
-import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight, Grid, List } from 'lucide-react';
+import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight, Grid, List, HelpCircle, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 import { formatPhoneNumber } from '../../lib/formValidation';
+import { calculateMembershipStatus } from '../../utils/membershipStatus';
 
 interface Member {
   id: string;
@@ -55,6 +56,18 @@ interface Member {
     date: string;
     status: string;
   }>;
+  membershipStatus?: 'Active' | 'Inactive' | 'Pending';
+  precinct: string;
+  free_text: string;
+  voter_id?: string;
+  date_of_birth?: string;
+  tshirt_size?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_relationship?: string;
+  tell_us_more?: string;
+  special_skills?: string;
+  health_issues?: string;
 }
 
 interface InterestCategory {
@@ -87,6 +100,8 @@ const AdminMembers: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [statusOptions, setStatusOptions] = useState<Array<{value: string, label: string}>>([]);
   const [precinctOptions, setPrecinctOptions] = useState<Array<{value: string, label: string}>>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const initializeInterestData = async () => {
     try {
@@ -159,46 +174,79 @@ const AdminMembers: React.FC = () => {
     }
   };
 
+  const loadStatusOptions = async () => {
+    // Use our calculated statuses directly
+    setStatusOptions([
+      { value: '', label: 'All Statuses' },
+      { value: 'active', label: 'Active' },
+      { value: 'expiring_soon', label: 'Expiring Soon' },
+      { value: 'expired', label: 'Expired' },
+      { value: 'pending', label: 'Pending' }
+    ]);
+  };
+
+  const loadPrecinctOptions = async () => {
+    try {
+      const { data: precincts, error } = await supabase
+        .from('members')
+        .select('precinct')
+        .not('precinct', 'is', null)
+        .order('precinct');
+
+      if (error) throw error;
+
+      // Get unique precinct values and format them for the select component
+      const uniquePrecincts = Array.from(new Set(precincts.map(p => p.precinct)))
+        .filter(Boolean) // Remove any null/undefined values
+        .map(precinct => ({
+          value: precinct,
+          label: precinct
+        }));
+
+      setPrecinctOptions(uniquePrecincts);
+    } catch (error) {
+      console.error('Error loading precinct options:', error);
+    }
+  };
+
   useEffect(() => {
-    console.log('Component mounted, fetching data...');
-    fetchMembers();
-    fetchInterestCategories();
-    checkAdminStatus();
-    loadMembershipTypes();
-    loadStatusOptions();
-    loadPrecinctOptions();
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        await Promise.all([
+          fetchMembers(),
+          loadStatusOptions(),
+          loadPrecinctOptions(),
+          fetchInterestCategories(),
+          loadMembershipTypes()
+        ]);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
   const fetchMembers = async () => {
     try {
       setIsLoading(true);
-      const { data: members, error } = await supabase
+      
+      // Fetch members with their interests and payments
+      const { data: membersData, error: membersError } = await supabase
         .from('members')
         .select(`
           *,
           member_interests (
-            interest_id,
             interest:interests (
               id,
               name,
               category:interest_categories (
+                id,
                 name
               )
-            )
-          ),
-          volunteer_hours (
-            id,
-            date,
-            hours,
-            description,
-            category
-          ),
-          meeting_attendance (
-            id,
-            meeting:meetings (
-              id,
-              title,
-              date
             )
           ),
           payments (
@@ -207,25 +255,28 @@ const AdminMembers: React.FC = () => {
             date,
             status
           )
-        `)
-        .order('last_name', { ascending: true });
+        `);
 
-      if (error) throw error;
-      
+      if (membersError) throw membersError;
+
       // Transform the data to match our Member interface
-      const transformedMembers = (members || []).map((member: any) => ({
-        ...member,
-        interests: member.member_interests?.map((mi: any) => ({
-          id: mi.interest.id,
-          name: mi.interest.name,
-          category: { name: mi.interest.category.name }
-        })) || [],
-        volunteer_hours: member.volunteer_hours || [],
-        meeting_attendance: member.meeting_attendance || [],
-        payments: member.payments || []
-      }));
+      const membersWithInterests = membersData.map(member => {
+        // Calculate status for each member
+        const status = calculateMembershipStatus(member.payments || []);
+        console.log(`Member ${member.first_name} ${member.last_name} status:`, status); // Debug log
 
-      setMembers(transformedMembers);
+        return {
+          ...member,
+          interests: member.member_interests.map((mi: any) => ({
+            id: mi.interest.id,
+            name: mi.interest.name,
+            category: mi.interest.category
+          })),
+          membershipStatus: status // Set the calculated status
+        };
+      });
+
+      setMembers(membersWithInterests);
     } catch (error) {
       console.error('Error fetching members:', error);
       setAlert({
@@ -283,58 +334,19 @@ const AdminMembers: React.FC = () => {
     });
   };
 
-  const renderMemberCard = (member: Member) => {
-    const isExpanded = expandedMembers.has(member.id);
-    const membershipType = membershipTypes.find(type => type.value === member.membership_type);
-    
-    return (
-      <Card key={member.id} className="relative cursor-pointer" onClick={() => toggleMemberExpansion(member.id)}>
-        <div className="absolute top-2 right-2 flex space-x-2" onClick={(e) => e.stopPropagation()}>
-          <Button
-            onClick={() => handleEditMember(member)}
-            variant="outline"
-            size="sm"
-            className="p-2"
-          >
-            <Edit2 className="h-4 w-4" />
-          </Button>
-          {!member.is_admin && (
-            <button
-              onClick={() => handleDeleteMember(member.id)}
-              className="text-red-600 hover:text-red-900 p-2"
-              title="Delete member"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        <div className="p-4 pt-12">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            {member.first_name} {member.last_name}
-          </h3>
-          <p className="text-sm text-gray-600 mb-1">{member.email}</p>
-          <p className="text-sm text-gray-600 mb-2">{formatPhoneNumber(member.phone)}</p>
-          <p className="text-sm text-gray-600">
-            {member.city}, {member.state}
-          </p>
-          <p className="text-sm text-gray-600 mb-2">
-            Type: {membershipType?.label || member.membership_type}
-          </p>
-          <div className="flex flex-wrap gap-1 mt-2">
-            {member.interests.slice(0, 3).map(interest => (
-              <span key={interest.id} className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
-                {interest.name}
-              </span>
-            ))}
-            {member.interests.length > 3 && (
-              <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs">
-                +{member.interests.length - 3} more
-              </span>
-            )}
-          </div>
-        </div>
-      </Card>
-    );
+  const formatPhoneNumber = (phone: string) => {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\D/g, '');
+    const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
+    if (match) {
+      return `(${match[1]}) ${match[2]}-${match[3]}`;
+    }
+    return phone;
+  };
+
+  const handleCardClick = (member: Member) => {
+    setSelectedMember(member);
+    setIsModalOpen(true);
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -342,226 +354,84 @@ const AdminMembers: React.FC = () => {
   };
 
   const handleEditMember = (member: Member) => {
-    setSelectedMember(member);
-    setIsEditing(true);
+    setSelectedMember({
+      ...member,
+      // Ensure all fields have string values or undefined
+      first_name: member.first_name || '',
+      last_name: member.last_name || '',
+      email: member.email || '',
+      phone: member.phone || '',
+      address: member.address || '',
+      city: member.city || '',
+      state: member.state || '',
+      zip: member.zip || '',
+      precinct: member.precinct || '',
+      free_text: member.free_text || '',
+      interests: member.interests || []
+    });
+    setShowEditModal(true);
   };
 
-  const updateMemberInterests = async (memberId: string, interestIds: string[]) => {
+  const handleUpdateMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember) return;
+
     try {
-      // First, delete any existing interests for this member
+      // First update the member's basic information
+      const { error: memberError } = await supabase
+        .from('members')
+        .update({
+          first_name: selectedMember.first_name,
+          last_name: selectedMember.last_name,
+          email: selectedMember.email,
+          phone: selectedMember.phone,
+          address: selectedMember.address,
+          city: selectedMember.city,
+          state: selectedMember.state,
+          zip: selectedMember.zip,
+          precinct: selectedMember.precinct,
+          free_text: selectedMember.free_text
+        })
+        .eq('id', selectedMember.id);
+
+      if (memberError) throw memberError;
+
+      // Then handle the interests
+      // First, delete all existing member_interests
       const { error: deleteError } = await supabase
         .from('member_interests')
         .delete()
-        .eq('member_id', memberId);
+        .eq('member_id', selectedMember.id);
 
       if (deleteError) throw deleteError;
 
-      // Then insert the new interests if there are any
-      if (interestIds.length > 0) {
+      // Then insert the new interests
+      if (selectedMember.interests.length > 0) {
+        const memberInterests = selectedMember.interests.map(interest => ({
+          member_id: selectedMember.id,
+          interest_id: interest.id
+        }));
+
         const { error: insertError } = await supabase
           .from('member_interests')
-          .insert(
-            interestIds.map(interestId => ({
-              member_id: memberId,
-              interest_id: interestId
-            }))
-          );
+          .insert(memberInterests);
 
         if (insertError) throw insertError;
       }
-    } catch (error) {
-      console.error('Error updating member interests:', error);
-      throw error;
-    }
-  };
 
-  const handleSaveMember = async () => {
-    try {
-      setIsLoading(true);
-      
-      // First check if we're authenticated and an admin
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setAlert({
-          type: 'error',
-          message: 'You must be logged in to perform this action'
-        });
-        return;
-      }
-
-      // Check if user is an admin using the is_admin function
-      const { data: isAdmin, error: adminError } = await supabase
-        .rpc('is_admin', { user_id: user.id });
-
-      if (adminError || !isAdmin) {
-        setAlert({
-          type: 'error',
-          message: 'You do not have permission to perform this action'
-        });
-        return;
-      }
-
-      // If this is a new member and they should be an admin
-      if (!selectedMember.id && selectedMember.is_admin) {
-        // Create a new auth user for the admin
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-          email: selectedMember.email,
-          email_confirm: true,
-          user_metadata: {
-            first_name: selectedMember.first_name,
-            last_name: selectedMember.last_name
-          }
-        });
-
-        if (authError) {
-          throw new Error(`Failed to create auth user: ${authError.message}`);
-        }
-
-        // Set the auth_id in the member data
-        selectedMember.auth_id = authData.user.id;
-      }
-
-      // If this is an existing member and their admin status is changing
-      if (selectedMember.id) {
-        const existingMember = members.find(m => m.id === selectedMember.id);
-        if (existingMember && existingMember.is_admin !== selectedMember.is_admin) {
-          if (selectedMember.is_admin) {
-            // Create auth user if they don't have one
-            if (!existingMember.auth_id) {
-              const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-                email: selectedMember.email,
-                email_confirm: true,
-                user_metadata: {
-                  first_name: selectedMember.first_name,
-                  last_name: selectedMember.last_name
-                }
-              });
-
-              if (authError) {
-                throw new Error(`Failed to create auth user: ${authError.message}`);
-              }
-
-              selectedMember.auth_id = authData.user.id;
-            }
-          } else {
-            // Remove admin privileges - we'll keep the auth user but they won't have admin access
-            // since the is_admin check in the RPC function will return false
-          }
-        }
-      }
-
-      if (selectedMember.id) {
-        // Update existing member
-        const updateData = {
-          first_name: selectedMember.first_name,
-          last_name: selectedMember.last_name,
-          email: selectedMember.email,
-          phone: selectedMember.phone,
-          address: selectedMember.address,
-          city: selectedMember.city,
-          state: selectedMember.state,
-          zip: selectedMember.zip,
-          membership_type: selectedMember.membership_type,
-          status: selectedMember.status,
-          is_admin: selectedMember.is_admin
-        };
-
-        // Only include auth_id if it's not null
-        if (selectedMember.auth_id) {
-          updateData.auth_id = selectedMember.auth_id;
-        }
-
-        const { error } = await supabase
-          .from('members')
-          .update(updateData)
-          .eq('id', selectedMember.id);
-
-        if (error) throw error;
-
-        // Update member interests
-        await updateMemberInterests(
-          selectedMember.id,
-          selectedMember.interests.map(interest => interest.id)
-        );
-
-        // Handle admin privileges
-        if (selectedMember.is_admin && selectedMember.auth_id) {
-          // If admin privileges are granted, ensure a record exists in the admins table
-          const { error: adminError } = await supabase
-            .from('admins')
-            .upsert({ user_id: selectedMember.auth_id }, { onConflict: 'user_id' });
-          if (adminError) throw adminError;
-        } else if (!selectedMember.is_admin && selectedMember.auth_id) {
-          // If admin privileges are removed, delete the record from the admins table
-          const { error: adminError } = await supabase
-            .from('admins')
-            .delete()
-            .eq('user_id', selectedMember.auth_id);
-          if (adminError) throw adminError;
-        }
-      } else {
-        // Create new member
-        const insertData = {
-          first_name: selectedMember.first_name,
-          last_name: selectedMember.last_name,
-          email: selectedMember.email,
-          phone: selectedMember.phone,
-          address: selectedMember.address,
-          city: selectedMember.city,
-          state: selectedMember.state,
-          zip: selectedMember.zip,
-          membership_type: selectedMember.membership_type,
-          status: selectedMember.status,
-          is_admin: selectedMember.is_admin
-        };
-
-        // Only include auth_id if it's not null
-        if (selectedMember.auth_id) {
-          insertData.auth_id = selectedMember.auth_id;
-        }
-
-        const { data: newMember, error } = await supabase
-          .from('members')
-          .insert([insertData])
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // Add member interests
-        if (newMember && selectedMember.interests.length > 0) {
-          await updateMemberInterests(
-            newMember.id,
-            selectedMember.interests.map(interest => interest.id)
-          );
-        }
-
-        // If admin privileges are granted and we have an auth_id, insert a record into the admins table
-        if (selectedMember.is_admin && selectedMember.auth_id) {
-          const { error: adminError } = await supabase
-            .from('admins')
-            .insert({ user_id: selectedMember.auth_id });
-          if (adminError) throw adminError;
-        }
-      }
-
+      // Refresh the members list
+      await fetchMembers();
+      setShowEditModal(false);
       setAlert({
         type: 'success',
-        message: `Member ${selectedMember.id ? 'updated' : 'created'} successfully`
+        message: 'Member updated successfully'
       });
-
-      setIsEditing(false);
-      setIsCreating(false);
-      setSelectedMember(null);
-      fetchMembers();
     } catch (error) {
-      console.error('Error saving member:', error);
+      console.error('Error updating member:', error);
       setAlert({
         type: 'error',
-        message: error.message || 'Error saving member'
+        message: 'Failed to update member. Please try again.'
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -854,148 +724,18 @@ const AdminMembers: React.FC = () => {
       .join(' ');
   };
 
-  // Add this new component for the member details modal
-  const MemberDetailsModal = ({ member, onClose }: { member: Member, onClose: () => void }) => {
-    const membershipType = membershipTypes.find(type => type.value === member.membership_type);
-    
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
-        <div className="fixed inset-0 bg-black bg-opacity-50"></div>
-        <div className="relative min-h-screen flex items-center justify-center p-4">
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  {member.first_name} {member.last_name}
-                </h2>
-                <button
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <span className="sr-only">Close</span>
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Contact Information</h3>
-                  <p className="mt-1 text-sm text-gray-900">{member.email}</p>
-                  <p className="mt-1 text-sm text-gray-900">{formatPhoneNumber(member.phone)}</p>
-                  <p className="mt-1 text-sm text-gray-900">
-                    {member.address}<br />
-                    {member.city}, {member.state} {member.zip}
-                  </p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Membership Details</h3>
-                  <p className="mt-1 text-sm text-gray-900">Type: {membershipType?.label || member.membership_type}</p>
-                  <p className="mt-1 text-sm text-gray-900">Status: {member.status}</p>
-                  <p className="mt-1 text-sm text-gray-900">Member since: {format(new Date(member.created_at), 'MMM d, yyyy')}</p>
-                  {member.renewal_date && (
-                    <p className="mt-1 text-sm text-gray-900">Renewal date: {format(new Date(member.renewal_date), 'MMM d, yyyy')}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Interests</h3>
-                <div className="flex flex-wrap gap-2">
-                  {member.interests.map(interest => (
-                    <span key={interest.id} className="px-3 py-1 bg-gray-100 rounded-full text-sm">
-                      {interest.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {member.volunteer_hours.length > 0 && (
-                <div className="border-t border-gray-200 pt-6 mt-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Volunteer Hours</h3>
-                  <div className="space-y-2">
-                    {member.volunteer_hours.map(hours => (
-                      <div key={hours.id} className="flex justify-between text-sm">
-                        <span>{format(new Date(hours.date), 'MMM d, yyyy')}</span>
-                        <span>{hours.hours} hours - {hours.activity}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {member.meeting_attendance.length > 0 && (
-                <div className="border-t border-gray-200 pt-6 mt-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Meeting Attendance</h3>
-                  <div className="space-y-2">
-                    {member.meeting_attendance.map(attendance => (
-                      <div key={attendance.id} className="flex justify-between text-sm">
-                        <span>{attendance.meeting.name}</span>
-                        <span>{format(new Date(attendance.meeting.date), 'MMM d, yyyy')}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {member.payments.length > 0 && (
-                <div className="border-t border-gray-200 pt-6 mt-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Payment History</h3>
-                  <div className="space-y-2">
-                    {member.payments.map(payment => (
-                      <div key={payment.id} className="flex justify-between text-sm">
-                        <span>{format(new Date(payment.date), 'MMM d, yyyy')}</span>
-                        <span>${payment.amount} - {payment.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const loadStatusOptions = async () => {
-    try {
-      const statuses = await getPickListValues(PICK_LIST_CATEGORIES.MEMBER_STATUSES);
-      setStatusOptions(statuses.map(status => ({
-        value: status.value,
-        label: status.name
-      })));
-    } catch (error) {
-      console.error('Error loading status options:', error);
-    }
-  };
-
-  const loadPrecinctOptions = async () => {
-    try {
-      const { data: precincts, error } = await supabase
-        .from('members')
-        .select('precinct')
-        .not('precinct', 'is', null)
-        .order('precinct');
-
-      if (error) throw error;
-
-      // Get unique precinct values and format them for the select component
-      const uniquePrecincts = Array.from(new Set(precincts.map(p => p.precinct)))
-        .filter(Boolean) // Remove any null/undefined values
-        .map(precinct => ({
-          value: precinct,
-          label: precinct
-        }));
-
-      setPrecinctOptions(uniquePrecincts);
-    } catch (error) {
-      console.error('Error loading precinct options:', error);
-      setAlert({
-        type: 'error',
-        message: 'Failed to load precinct options'
-      });
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return 'bg-green-100 text-green-800';
+      case 'expiring_soon':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'expired':
+        return 'bg-red-100 text-red-800';
+      case 'pending':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -1008,12 +748,13 @@ const AdminMembers: React.FC = () => {
 
     // Interest filter
     const matchesInterests = selectedInterests.length === 0 || 
-      selectedInterests.some(interestId => 
+      selectedInterests.every(interestId => 
         member.interests.some(interest => interest.id === interestId)
       );
 
-    // Status filter
-    const matchesStatus = !selectedStatus || member.status === selectedStatus;
+    // Status filter - using the calculated membershipStatus (case-insensitive)
+    const matchesStatus = !selectedStatus || 
+      member.membershipStatus.toLowerCase() === selectedStatus.toLowerCase();
 
     // Precinct filter
     const matchesPrecinct = selectedPrecinct.length === 0 || 
@@ -1021,6 +762,78 @@ const AdminMembers: React.FC = () => {
 
     return matchesSearch && matchesInterests && matchesStatus && matchesPrecinct;
   });
+
+  const renderMemberCard = (member: Member) => {
+    const interests = member.interests || [];
+    const displayInterests = interests.length > 0 ? interests.slice(0, 3) : [];
+    const hasMoreInterests = interests.length > 3;
+
+    return (
+      <Card 
+        key={member.id} 
+        className="p-6 relative cursor-pointer hover:shadow-md transition-shadow"
+        onClick={() => handleCardClick(member)}
+      >
+        <div className="absolute top-2 right-2 flex space-x-2" onClick={(e) => e.stopPropagation()}>
+          <Button
+            onClick={() => handleEditMember(member)}
+            variant="outline"
+            size="sm"
+            className="p-2"
+          >
+            <Edit2 className="h-4 w-4" />
+          </Button>
+          {!member.is_admin && (
+            <button
+              onClick={() => handleDeleteMember(member.id)}
+              className="text-red-600 hover:text-red-900 p-2"
+              title="Delete member"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">
+              {member.first_name} {member.last_name}
+            </h3>
+            <div className="mt-1">
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(member.membershipStatus || 'Pending')}`}>
+                {member.membershipStatus || 'Pending'}
+              </span>
+            </div>
+          </div>
+          
+          <div className="space-y-2 text-sm text-gray-600">
+            {member.email && (
+              <div>{member.email}</div>
+            )}
+            {member.phone && (
+              <div>{formatPhoneNumber(member.phone)}</div>
+            )}
+            {displayInterests.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {displayInterests.map((interest, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                  >
+                    {interest.name}
+                  </span>
+                ))}
+                {hasMoreInterests && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                    +{interests.length - 3} more
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    );
+  };
 
   const renderMemberList = (member: Member) => {
     const membershipType = membershipTypes.find(type => type.value === member.membership_type);
@@ -1155,7 +968,9 @@ const AdminMembers: React.FC = () => {
                   interests: [],
                   volunteer_hours: [],
                   meeting_attendance: [],
-                  payments: []
+                  payments: [],
+                  precinct: '',
+                  free_text: ''
                 });
                 setIsCreating(true);
               }}
@@ -1208,14 +1023,24 @@ const AdminMembers: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">Membership Status</h3>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <h3 className="text-sm font-medium text-gray-700">Membership Status</h3>
+                    <div className="relative group">
+                      <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                      <div className="absolute left-0 mt-2 w-64 p-2 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+                        <div className="text-xs text-gray-600 space-y-1">
+                          <p><strong>Active:</strong> Payment within last 11 months</p>
+                          <p><strong>Expiring Soon:</strong> Payment 11-12 months ago</p>
+                          <p><strong>Expired:</strong> No payment in over 12 months</p>
+                          <p><strong>Pending:</strong> No payment history</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <SelectField
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
-                    options={[
-                      { value: '', label: 'All Statuses' },
-                      ...statusOptions
-                    ]}
+                    options={statusOptions}
                   />
                 </div>
                 <div>
@@ -1297,315 +1122,357 @@ const AdminMembers: React.FC = () => {
           )}
         </div>
 
-        {/* Create Member Modal */}
-        {isCreating && selectedMember && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
-            <div className="relative min-h-screen flex items-center justify-center p-4">
-              <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold mb-4">Create New Member</h2>
-                  <form onSubmit={handleCreateMember} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <TextField
-                        label="First Name"
-                        value={selectedMember.first_name}
-                        onChange={(e) => setSelectedMember({...selectedMember, first_name: e.target.value})}
-                        required
-                      />
-                      <TextField
-                        label="Last Name"
-                        value={selectedMember.last_name}
-                        onChange={(e) => setSelectedMember({...selectedMember, last_name: e.target.value})}
-                        required
-                      />
-                      <TextField
-                        label="Email"
-                        type="email"
-                        value={selectedMember.email}
-                        onChange={(e) => setSelectedMember({...selectedMember, email: e.target.value})}
-                        required
-                      />
-                      <TextField
-                        label="Phone"
-                        type="tel"
-                        value={selectedMember.phone}
-                        onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value.replace(/\D/g, '')})}
-                      />
-                      <TextField
-                        label="Address"
-                        value={selectedMember.address}
-                        onChange={(e) => setSelectedMember({...selectedMember, address: e.target.value})}
-                      />
-                      <div className="grid grid-cols-3 gap-4">
-                        <TextField
-                          label="City"
-                          value={selectedMember.city}
-                          onChange={(e) => setSelectedMember({...selectedMember, city: e.target.value})}
-                        />
-                        <TextField
-                          label="State"
-                          value={selectedMember.state}
-                          onChange={(e) => setSelectedMember({...selectedMember, state: e.target.value})}
-                        />
-                        <TextField
-                          label="ZIP"
-                          value={selectedMember.zip}
-                          onChange={(e) => setSelectedMember({...selectedMember, zip: e.target.value})}
-                        />
-                      </div>
-                      <SelectField
-                        label="Membership Type"
-                        value={selectedMember.membership_type}
-                        onChange={(e) => setSelectedMember({...selectedMember, membership_type: e.target.value})}
-                        options={membershipTypes}
-                        required
-                      />
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id="is_admin_create"
-                          checked={selectedMember.is_admin}
-                          onChange={(e) => setSelectedMember({...selectedMember, is_admin: e.target.checked})}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <label htmlFor="is_admin_create" className="ml-2 block text-sm text-gray-900">
-                          Grant admin privileges
-                        </label>
-                      </div>
-                    </div>
+        {isModalOpen && selectedMember && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {selectedMember.first_name} {selectedMember.last_name}
+                </h2>
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <span className="sr-only">Close</span>
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
 
-                    <div className="border-t border-gray-200 pt-6">
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">Interests</h3>
-                      <div className="space-y-4 max-h-[300px] overflow-y-auto">
-                        {interestCategories.map((category) => (
-                          <div key={category.id} className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-700 mb-2">{category.name}</h4>
-                            <div className="space-y-2">
-                              {category.interests.map((interest) => (
-                                <div key={interest.id} className="flex items-center">
-                                  <input
-                                    type="checkbox"
-                                    id={`interest-${interest.id}`}
-                                    checked={selectedMember.interests.some(i => i.id === interest.id)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedMember({
-                                          ...selectedMember,
-                                          interests: [
-                                            ...selectedMember.interests,
-                                            {
-                                              id: interest.id,
-                                              name: interest.name,
-                                              category: { name: category.name }
-                                            }
-                                          ]
-                                        });
-                                      } else {
-                                        setSelectedMember({
-                                          ...selectedMember,
-                                          interests: selectedMember.interests.filter(i => i.id !== interest.id)
-                                        });
-                                      }
-                                    }}
-                                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                                  />
-                                  <label htmlFor={`interest-${interest.id}`} className="ml-2 block text-sm text-gray-900">
-                                    {interest.name}
-                                  </label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Contact Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">Email</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedMember.email}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">Phone</label>
+                      <p className="mt-1 text-sm text-gray-900">{formatPhoneNumber(selectedMember.phone)}</p>
+                    </div>
+                    {selectedMember.address && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Address</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.address}</p>
                       </div>
-                    </div>
-
-                    <div className="flex justify-end space-x-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setIsCreating(false);
-                          setSelectedMember(null);
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" variant="primary">
-                        Create Member
-                      </Button>
-                    </div>
-                  </form>
+                    )}
+                    {(selectedMember.city || selectedMember.state || selectedMember.zip) && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Location</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {[selectedMember.city, selectedMember.state, selectedMember.zip]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Membership Details</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">Status</label>
+                      <p className="mt-1">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedMember.membershipStatus || 'Pending')}`}>
+                          {selectedMember.membershipStatus || 'Pending'}
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">Membership Type</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedMember.membership_type}</p>
+                    </div>
+                    {selectedMember.precinct && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Precinct</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.precinct}</p>
+                      </div>
+                    )}
+                    {selectedMember.voter_id && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Voter ID</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.voter_id}</p>
+                      </div>
+                    )}
+                    {selectedMember.date_of_birth && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Birthday</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {format(new Date(selectedMember.date_of_birth), 'MMMM d, yyyy')}
+                        </p>
+                      </div>
+                    )}
+                    {selectedMember.tshirt_size && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">T-Shirt Size</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.tshirt_size}</p>
+                      </div>
+                    )}
+                    {selectedMember.created_at && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Member Since</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {format(new Date(selectedMember.created_at), 'MMMM d, yyyy')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Emergency Contact</h3>
+                  <div className="space-y-3">
+                    {selectedMember.emergency_contact_name && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Name</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.emergency_contact_name}</p>
+                      </div>
+                    )}
+                    {selectedMember.emergency_contact_phone && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Phone</label>
+                        <p className="mt-1 text-sm text-gray-900">{formatPhoneNumber(selectedMember.emergency_contact_phone)}</p>
+                      </div>
+                    )}
+                    {selectedMember.emergency_contact_relationship && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Relationship</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.emergency_contact_relationship}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Additional Information</h3>
+                  <div className="space-y-3">
+                    {selectedMember.tell_us_more && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Additional Information</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.tell_us_more}</p>
+                      </div>
+                    )}
+                    {selectedMember.special_skills && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Special Skills</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.special_skills}</p>
+                      </div>
+                    )}
+                    {selectedMember.health_issues && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500">Health Issues</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedMember.health_issues}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {selectedMember.interests && selectedMember.interests.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Interests</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedMember.interests.map((interest) => (
+                      <span
+                        key={interest.id}
+                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800"
+                      >
+                        {interest.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedMember.volunteer_hours && selectedMember.volunteer_hours.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Volunteer Hours</h3>
+                  <div className="space-y-2">
+                    {selectedMember.volunteer_hours.map((hours, index) => (
+                      <div key={index} className="flex justify-between text-sm">
+                        <span>{format(new Date(hours.date), 'MMM d, yyyy')}</span>
+                        <span>{hours.hours} hours - {hours.activity}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedMember.meeting_attendance && selectedMember.meeting_attendance.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Meeting Attendance</h3>
+                  <div className="space-y-2">
+                    {selectedMember.meeting_attendance.map((attendance, index) => (
+                      <div key={index} className="flex justify-between text-sm">
+                        <span>{attendance.meeting.name}</span>
+                        <span>{format(new Date(attendance.meeting.date), 'MMM d, yyyy')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedMember.payments && selectedMember.payments.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Payment History</h3>
+                  <div className="space-y-2">
+                    {selectedMember.payments.map((payment, index) => (
+                      <div key={index} className="flex justify-between text-sm">
+                        <span>{format(new Date(payment.date), 'MMM d, yyyy')}</span>
+                        <span>${payment.amount} - {payment.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <Button variant="outline" onClick={() => handleEditMember(selectedMember)}>
+                  Edit Member
+                </Button>
+                <Button onClick={() => setIsModalOpen(false)}>
+                  Close
+                </Button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Edit Member Modal */}
-        {isEditing && selectedMember && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
-            <div className="relative min-h-screen flex items-center justify-center p-4">
-              <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold mb-4">Edit Member</h2>
-                  <form onSubmit={handleSaveMember}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                      <TextField
-                        label="First Name"
-                        value={selectedMember.first_name}
-                        onChange={(e) => setSelectedMember({...selectedMember, first_name: e.target.value})}
-                        required
-                      />
-                      <TextField
-                        label="Last Name"
-                        value={selectedMember.last_name}
-                        onChange={(e) => setSelectedMember({...selectedMember, last_name: e.target.value})}
-                        required
-                      />
-                      <TextField
-                        label="Email"
-                        type="email"
-                        value={selectedMember.email}
-                        onChange={(e) => setSelectedMember({...selectedMember, email: e.target.value})}
-                        required
-                      />
-                      <TextField
-                        label="Phone"
-                        type="tel"
-                        value={selectedMember.phone}
-                        onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value.replace(/\D/g, '')})}
-                      />
-                      <TextField
-                        label="Address"
-                        value={selectedMember.address}
-                        onChange={(e) => setSelectedMember({...selectedMember, address: e.target.value})}
-                      />
-                      <div className="grid grid-cols-3 gap-4">
-                        <TextField
-                          label="City"
-                          value={selectedMember.city}
-                          onChange={(e) => setSelectedMember({...selectedMember, city: e.target.value})}
-                        />
-                        <TextField
-                          label="State"
-                          value={selectedMember.state}
-                          onChange={(e) => setSelectedMember({...selectedMember, state: e.target.value})}
-                        />
-                        <TextField
-                          label="ZIP"
-                          value={selectedMember.zip}
-                          onChange={(e) => setSelectedMember({...selectedMember, zip: e.target.value})}
-                        />
-                      </div>
-                      <SelectField
-                        label="Membership Type"
-                        value={selectedMember.membership_type}
-                        onChange={(e) => setSelectedMember({...selectedMember, membership_type: e.target.value})}
-                        options={membershipTypes}
-                        required
-                      />
-                      <SelectField
-                        label="Status"
-                        value={selectedMember.status}
-                        onChange={(e) => setSelectedMember({...selectedMember, status: e.target.value})}
-                        options={[
-                          { value: 'active', label: 'Active' },
-                          { value: 'inactive', label: 'Inactive' },
-                          { value: 'pending', label: 'Pending' }
-                        ]}
-                        required
-                      />
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id="is_admin"
-                          checked={selectedMember.is_admin}
-                          onChange={(e) => setSelectedMember({...selectedMember, is_admin: e.target.checked})}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <label htmlFor="is_admin" className="ml-2 block text-sm text-gray-900">
-                          Grant admin privileges
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-6">
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">Interests</h3>
-                      <div className="space-y-4 max-h-[300px] overflow-y-auto">
-                        {interestCategories.map((category) => (
-                          <div key={category.id} className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-700 mb-2">{category.name}</h4>
-                            <div className="space-y-2">
-                              {category.interests.map((interest) => (
-                                <div key={interest.id} className="flex items-center">
-                                  <input
-                                    type="checkbox"
-                                    id={`interest-${interest.id}`}
-                                    checked={selectedMember.interests.some(i => i.id === interest.id)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedMember({
-                                          ...selectedMember,
-                                          interests: [
-                                            ...selectedMember.interests,
-                                            {
-                                              id: interest.id,
-                                              name: interest.name,
-                                              category: { name: category.name }
-                                            }
-                                          ]
-                                        });
-                                      } else {
-                                        setSelectedMember({
-                                          ...selectedMember,
-                                          interests: selectedMember.interests.filter(i => i.id !== interest.id)
-                                        });
-                                      }
-                                    }}
-                                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                                  />
-                                  <label htmlFor={`interest-${interest.id}`} className="ml-2 block text-sm text-gray-900">
-                                    {interest.name}
-                                  </label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+        {showEditModal && selectedMember && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Edit Member</h2>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              <form onSubmit={handleUpdateMember} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <TextField
+                    label="First Name"
+                    name="first_name"
+                    value={selectedMember.first_name || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, first_name: e.target.value})}
+                    required
+                  />
+                  <TextField
+                    label="Last Name"
+                    name="last_name"
+                    value={selectedMember.last_name || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, last_name: e.target.value})}
+                    required
+                  />
+                  <TextField
+                    label="Email"
+                    name="email"
+                    type="email"
+                    value={selectedMember.email || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, email: e.target.value})}
+                    required
+                  />
+                  <TextField
+                    label="Phone"
+                    name="phone"
+                    value={selectedMember.phone || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value})}
+                  />
+                  <TextField
+                    label="Address"
+                    name="address"
+                    value={selectedMember.address || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, address: e.target.value})}
+                  />
+                  <TextField
+                    label="City"
+                    name="city"
+                    value={selectedMember.city || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, city: e.target.value})}
+                  />
+                  <TextField
+                    label="State"
+                    name="state"
+                    value={selectedMember.state || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, state: e.target.value})}
+                  />
+                  <TextField
+                    label="ZIP"
+                    name="zip"
+                    value={selectedMember.zip || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, zip: e.target.value})}
+                  />
+                  <TextField
+                    label="Precinct"
+                    name="precinct"
+                    value={selectedMember.precinct || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, precinct: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Interests
+                  </label>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {interestCategories.map(category => (
+                      <div key={category.id}>
+                        <h4 className="text-xs font-medium text-gray-500 mb-1">{category.name}</h4>
+                        {category.interests.map(interest => (
+                          <label key={interest.id} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedMember.interests.some(i => i.id === interest.id)}
+                              onChange={(e) => {
+                                const newInterests = e.target.checked
+                                  ? [...selectedMember.interests, interest]
+                                  : selectedMember.interests.filter(i => i.id !== interest.id);
+                                setSelectedMember({...selectedMember, interests: newInterests});
+                              }}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-sm text-gray-700">{interest.name}</span>
+                          </label>
                         ))}
                       </div>
-                    </div>
-
-                    <div className="mt-6 flex justify-end space-x-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setIsEditing(false);
-                          setSelectedMember(null);
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" variant="primary">
-                        Save Changes
-                      </Button>
-                    </div>
-                  </form>
+                    ))}
+                  </div>
                 </div>
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Additional Information
+                  </label>
+                  <textarea
+                    name="free_text"
+                    value={selectedMember.free_text || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, free_text: e.target.value})}
+                    rows={4}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  />
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        )}
-
-        {/* Member Details Modal */}
-        {expandedMembers.size > 0 && (
-          <MemberDetailsModal
-            member={members.find(m => expandedMembers.has(m.id))!}
-            onClose={() => setExpandedMembers(new Set())}
-          />
         )}
       </div>
     </Layout>
