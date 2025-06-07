@@ -5,8 +5,8 @@ import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
-import { Search, Plus, Download, Edit2, Trash2, X } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { Search, Plus, Download, Edit2, Trash2, X, Calendar } from 'lucide-react';
+import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
@@ -47,6 +47,54 @@ interface MemberPayment {
   payment_count: number;
 }
 
+interface AlertState {
+  type: 'success' | 'error';
+  message: string;
+}
+
+interface FormData {
+  member_id: string;
+  amount: string;
+  date: string;
+  payment_method: string;
+  status: string;
+  is_recurring: boolean;
+  notes: string;
+}
+
+interface MemberPaymentSummary {
+  member_id: string;
+  member: Member;
+  total_amount: number;
+  payment_count: number;
+  last_payment_date: string;
+  transactions: Payment[];
+}
+
+const getDefaultStartDate = (): string => {
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-11 (Jan-Dec)
+  const currentYear = now.getFullYear();
+  
+  // If we're in Jan-Sept (months 0-8), start from Oct 1 of previous year
+  if (currentMonth < 9) {
+    return format(new Date(currentYear - 1, 9, 1), 'yyyy-MM-dd');
+  }
+  
+  // If we're in Oct-Dec (months 9-11), start from Oct 1 of current year
+  return format(new Date(currentYear, 9, 1), 'yyyy-MM-dd');
+};
+
+const getPreviousMonthStats = (currentDate: Date) => {
+  const previousMonth = subMonths(currentDate, 1);
+  return {
+    start: format(startOfMonth(previousMonth), 'yyyy-MM-dd'),
+    end: format(endOfMonth(previousMonth), 'yyyy-MM-dd'),
+    monthName: format(previousMonth, 'MMMM'),
+    year: format(previousMonth, 'yyyy')
+  };
+};
+
 const AdminPayments: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -57,11 +105,24 @@ const AdminPayments: React.FC = () => {
   const [notes, setNotes] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [isRecurring, setIsRecurring] = useState<boolean>(false);
-  const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
+  const [alert, setAlert] = useState<AlertState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [memberTransactions, setMemberTransactions] = useState<Payment[]>([]);
+  const [selectedMemberTransactions, setSelectedMemberTransactions] = useState<Payment[]>([]);
+  const [startDate, setStartDate] = useState<string>(getDefaultStartDate());
+  const [endDate, setEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [tempStartDate, setTempStartDate] = useState<string>(getDefaultStartDate());
+  const [tempEndDate, setTempEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [formData, setFormData] = useState<FormData>({
+    member_id: '',
+    amount: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    payment_method: '',
+    status: '',
+    is_recurring: false,
+    notes: ''
+  });
 
   useEffect(() => {
     fetchMembers();
@@ -96,6 +157,8 @@ const AdminPayments: React.FC = () => {
           *,
           member:members(first_name, last_name)
         `)
+        .gte('date', startDate)
+        .lte('date', endDate)
         .order('date', { ascending: false });
 
       if (error) throw error;
@@ -327,21 +390,29 @@ const AdminPayments: React.FC = () => {
       .join(' ');
   };
 
-  const handleViewMemberPayments = (memberId: string) => {
-    const member = payments.find(p => p.member_id === memberId)?.member;
-    if (member) {
-      setSelectedMember(member);
-      setMemberTransactions(payments.filter(p => p.member_id === memberId));
-      setShowTransactionModal(true);
-    }
+  const handleViewTransactions = (memberId: string, member: Member) => {
+    const memberTransactions = payments.filter(p => p.member_id === memberId);
+    setSelectedMemberTransactions(memberTransactions);
+    setSelectedMember(member);
+    setShowTransactionModal(true);
   };
 
-  const handleEditPayment = (payment: Payment) => {
-    // Implement edit payment logic
-    console.log('Edit payment:', payment);
+  const handleEditTransaction = (payment: Payment) => {
+    setFormData({
+      member_id: payment.member_id,
+      amount: payment.amount.toString(),
+      date: payment.date,
+      payment_method: payment.payment_method,
+      status: payment.status,
+      is_recurring: payment.is_recurring,
+      notes: payment.notes || ''
+    });
+    setShowTransactionModal(false);
   };
 
-  const handleDeletePayment = async (paymentId: string) => {
+  const handleDeleteTransaction = async (paymentId: string) => {
+    if (!window.confirm('Are you sure you want to delete this payment?')) return;
+
     try {
       const { error } = await supabase
         .from('payments')
@@ -349,9 +420,11 @@ const AdminPayments: React.FC = () => {
         .eq('id', paymentId);
 
       if (error) throw error;
-
+      
+      // Update both the transactions list and the main payments list
+      setSelectedMemberTransactions(prev => prev.filter(p => p.id !== paymentId));
       setPayments(prev => prev.filter(p => p.id !== paymentId));
-      setMemberTransactions(prev => prev.filter(p => p.id !== paymentId));
+      
       setAlert({
         type: 'success',
         message: 'Payment deleted successfully'
@@ -365,152 +438,110 @@ const AdminPayments: React.FC = () => {
     }
   };
 
-  // Group payments by member
-  const memberPayments = useMemo(() => {
-    // First, sort payments by date to ensure we get the most recent payment info
-    const sortedPayments = [...payments].sort((a, b) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-
-    // Group by member_id
-    const grouped = sortedPayments.reduce((acc: { [key: string]: MemberPayment }, payment) => {
-      const memberId = payment.member_id;
-      
-      if (!acc[memberId]) {
-        // Initialize member payment record
-        acc[memberId] = {
-          member_id: memberId,
-          member: payment.member,
-          total_amount: payment.amount,
+  // Calculate member payment summaries
+  const memberSummaries = useMemo(() => {
+    const summaries = new Map<string, MemberPaymentSummary>();
+    
+    payments.forEach(payment => {
+      if (!summaries.has(payment.member_id)) {
+        summaries.set(payment.member_id, {
+          member_id: payment.member_id,
+          member: payment.member!,
+          total_amount: 0,
+          payment_count: 0,
           last_payment_date: payment.date,
-          last_payment_method: payment.payment_method,
-          is_recurring: payment.is_recurring,
-          payment_count: 1
-        };
-      } else {
-        // Update existing member payment record
-        acc[memberId].total_amount += payment.amount;
-        acc[memberId].payment_count += 1;
-        
-        // Since payments are sorted by date, the first payment we see for each member
-        // is their most recent payment
-        if (acc[memberId].last_payment_date === payment.date) {
-          acc[memberId].last_payment_method = payment.payment_method;
-          acc[memberId].is_recurring = payment.is_recurring;
-        }
+          transactions: []
+        });
       }
       
-      return acc;
-    }, {});
+      const summary = summaries.get(payment.member_id)!;
+      summary.total_amount += payment.amount;
+      summary.payment_count += 1;
+      summary.transactions.push(payment);
+      
+      // Update last payment date if this payment is more recent
+      if (new Date(payment.date) > new Date(summary.last_payment_date)) {
+        summary.last_payment_date = payment.date;
+      }
+    });
     
-    // Convert to array and sort by member name
-    return Object.values(grouped).sort((a, b) => 
-      `${a.member.first_name} ${a.member.last_name}`.localeCompare(`${b.member.first_name} ${b.member.last_name}`)
-    );
+    return Array.from(summaries.values());
   }, [payments]);
 
-  const columns = [
-    {
-      header: 'Member',
-      accessor: (row: MemberPayment) => `${row.member.first_name} ${row.member.last_name}`,
-      sortable: true
-    },
-    {
-      header: 'Total Contributions',
-      accessor: 'total_amount',
-      sortable: true,
-      render: (value: number) => formatCurrency(value)
-    },
-    {
-      header: 'Payment Count',
-      accessor: 'payment_count',
-      sortable: true
-    },
-    {
-      header: 'Last Payment',
-      accessor: 'last_payment_date',
-      sortable: true,
-      render: (value: string) => formatDate(value)
-    },
-    {
-      header: 'Payment Method',
-      accessor: 'last_payment_method',
-      sortable: true
-    },
-    {
-      header: 'Recurring',
-      accessor: 'is_recurring',
-      sortable: true,
-      render: (value: boolean) => value ? 'Yes' : 'No'
-    },
-    {
-      header: 'Actions',
-      accessor: 'member_id',
-      render: (value: string) => (
-        <div className="flex space-x-2">
-          <button
-            onClick={() => handleViewMemberPayments(value)}
-            className="text-primary-600 hover:text-primary-900"
-            title="View payment history"
-          >
-            <Edit2 className="h-5 w-5" />
-          </button>
-        </div>
-      )
-    }
-  ];
+  // Add useEffect to refetch payments when date range changes
+  useEffect(() => {
+    fetchPayments();
+  }, [startDate, endDate]);
 
-  const transactionColumns = [
-    {
-      header: 'Date',
-      accessor: 'date',
-      sortable: true,
-      render: (value: string) => formatDate(value)
-    },
-    {
-      header: 'Amount',
-      accessor: 'amount',
-      sortable: true,
-      render: (value: number) => formatCurrency(value)
-    },
-    {
-      header: 'Method',
-      accessor: 'payment_method',
-      sortable: true
-    },
-    {
-      header: 'Recurring',
-      accessor: 'is_recurring',
-      sortable: true,
-      render: (value: boolean) => value ? 'Yes' : 'No'
-    },
-    {
-      header: 'Notes',
-      accessor: 'notes'
-    },
-    {
-      header: 'Actions',
-      accessor: 'id',
-      render: (value: string, row: Payment) => (
-        <div className="flex space-x-2">
-          <button
-            onClick={() => handleEditPayment(row)}
-            className="text-primary-600 hover:text-primary-900"
-            title="Edit payment"
-          >
-            <Edit2 className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => handleDeletePayment(value)}
-            className="text-red-600 hover:text-red-900"
-            title="Delete payment"
-          >
-            <Trash2 className="h-5 w-5" />
-          </button>
-        </div>
-      )
+  // Calculate summary statistics
+  const summaryStats = useMemo(() => {
+    const totalContributions = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    
+    // Get unique members with recurring donations in the last month
+    const previousMonth = getPreviousMonthStats(new Date());
+    const lastMonthPayments = payments.filter(payment => 
+      payment.date >= previousMonth.start && 
+      payment.date <= previousMonth.end
+    );
+    
+    const recurringMembersLastMonth = new Set(
+      lastMonthPayments
+        .filter(payment => payment.is_recurring)
+        .map(payment => payment.member_id)
+    );
+    
+    // Get total number of members
+    const totalMembers = members.length;
+    
+    // Calculate recurring percentage for last month
+    const recurringPercentage = totalMembers > 0 
+      ? (recurringMembersLastMonth.size / totalMembers) * 100 
+      : 0;
+    
+    // Get recurring donations from previous month
+    const previousMonthRecurring = lastMonthPayments
+      .filter(payment => payment.is_recurring)
+      .reduce((sum, payment) => sum + payment.amount, 0);
+
+    return {
+      totalContributions,
+      recurringPercentage,
+      previousMonthRecurring,
+      previousMonthName: previousMonth.monthName,
+      previousMonthYear: previousMonth.year
+    };
+  }, [payments, members]);
+
+  // Add useEffect to update start date when month changes
+  useEffect(() => {
+    const checkAndUpdateStartDate = () => {
+      const newStartDate = getDefaultStartDate();
+      if (newStartDate !== startDate) {
+        setStartDate(newStartDate);
+      }
+    };
+
+    // Check immediately
+    checkAndUpdateStartDate();
+
+    // Set up interval to check daily
+    const interval = setInterval(checkAndUpdateStartDate, 24 * 60 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [startDate]);
+
+  const handleDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') {
+      setTempStartDate(value);
+    } else {
+      setTempEndDate(value);
     }
-  ];
+  };
+
+  const handleApplyDateFilter = () => {
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
+  };
 
   if (isLoading) {
     return (
@@ -531,15 +562,16 @@ const AdminPayments: React.FC = () => {
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Payment Management</h1>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
           <Button
             onClick={exportToCSV}
             variant="outline"
+            className="flex items-center"
           >
-            <Download className="h-5 w-5 mr-2" />
-            Export CSV
+            <Download className="h-4 w-4 mr-2" />
+            Export to CSV
           </Button>
         </div>
 
@@ -552,7 +584,7 @@ const AdminPayments: React.FC = () => {
           />
         )}
 
-        <Card className="mb-8">
+        <Card className="mb-6">
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               {editingPayment ? 'Edit Payment' : 'Record Payment'}
@@ -649,46 +681,190 @@ const AdminPayments: React.FC = () => {
           </div>
         </Card>
 
+        {/* Summary Statistics */}
+        <Card className="mb-6">
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="md:col-span-1">
+                <h3 className="text-sm font-medium text-gray-500">Date Range</h3>
+                <div className="mt-2 space-y-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-500">Start Date</label>
+                      <input
+                        type="date"
+                        value={tempStartDate}
+                        onChange={(e) => handleDateChange('start', e.target.value)}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-500">End Date</label>
+                      <input
+                        type="date"
+                        value={tempEndDate}
+                        onChange={(e) => handleDateChange('end', e.target.value)}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleApplyDateFilter}
+                      variant="primary"
+                      size="sm"
+                    >
+                      Apply Filter
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="md:col-span-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Total Contributions</h3>
+                    <p className="mt-2 text-2xl font-semibold text-gray-900">
+                      {formatCurrency(summaryStats.totalContributions)}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      in selected date range
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Recurring Donations</h3>
+                    <p className="mt-2 text-2xl font-semibold text-gray-900">
+                      {summaryStats.recurringPercentage.toFixed(1)}%
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      of members had recurring donations in {summaryStats.previousMonthName} {summaryStats.previousMonthYear}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Total Recurring Donations</h3>
+                    <p className="mt-2 text-2xl font-semibold text-gray-900">
+                      {formatCurrency(summaryStats.previousMonthRecurring)}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      in {summaryStats.previousMonthName} {summaryStats.previousMonthYear}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <Card>
           <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Member Contributions</h2>
             <DataTable
-              columns={columns}
-              data={memberPayments}
-              searchable={true}
-              searchPlaceholder="Search members..."
-              className="bg-white shadow rounded-lg"
+              data={memberSummaries}
+              columns={[
+                {
+                  header: 'Member',
+                  accessor: 'member',
+                  render: (value: Member) => `${value.first_name} ${value.last_name}`
+                },
+                {
+                  header: 'Total Contributions',
+                  accessor: 'total_amount',
+                  render: (value: number) => formatCurrency(value)
+                },
+                {
+                  header: 'Payment Count',
+                  accessor: 'payment_count'
+                },
+                {
+                  header: 'Last Payment',
+                  accessor: 'last_payment_date',
+                  render: (value: string) => formatDate(value)
+                },
+                {
+                  header: 'Actions',
+                  accessor: 'member_id',
+                  render: (value: string, row: MemberPaymentSummary) => (
+                    <Button
+                      onClick={() => handleViewTransactions(value, row.member)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      View Transactions
+                    </Button>
+                  )
+                }
+              ]}
+              isLoading={isLoading}
             />
           </div>
         </Card>
 
-        {/* Transaction List Modal */}
+        {/* Transaction Modal */}
         {showTransactionModal && selectedMember && (
-          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg w-[90vw] max-w-6xl max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">
-                    Payment History - {selectedMember.first_name} {selectedMember.last_name}
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setShowTransactionModal(false);
-                      setSelectedMember(null);
-                    }}
-                    className="text-gray-400 hover:text-gray-500"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
-                <DataTable
-                  columns={transactionColumns}
-                  data={memberTransactions}
-                  searchable={true}
-                  searchPlaceholder="Search transactions..."
-                  className="bg-white"
-                />
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">
+                  Transactions for {selectedMember.first_name} {selectedMember.last_name}
+                </h2>
+                <Button
+                  onClick={() => setShowTransactionModal(false)}
+                  variant="outline"
+                  size="sm"
+                  className="p-2"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
+              
+              <DataTable
+                data={selectedMemberTransactions}
+                columns={[
+                  {
+                    header: 'Date',
+                    accessor: 'date',
+                    render: (value: string) => formatDate(value)
+                  },
+                  {
+                    header: 'Amount',
+                    accessor: 'amount',
+                    render: (value: number) => formatCurrency(value)
+                  },
+                  {
+                    header: 'Method',
+                    accessor: 'payment_method',
+                    render: (value: string) => formatDisplayName(value)
+                  },
+                  {
+                    header: 'Recurring',
+                    accessor: 'is_recurring',
+                    render: (value: boolean) => value ? 'Yes' : 'No'
+                  },
+                  {
+                    header: 'Actions',
+                    accessor: 'id',
+                    render: (value: string, row: Payment) => (
+                      <div className="flex space-x-2">
+                        <Button
+                          onClick={() => handleEditTransaction(row)}
+                          variant="outline"
+                          size="sm"
+                          className="p-2"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          onClick={() => handleDeleteTransaction(value)}
+                          variant="outline"
+                          size="sm"
+                          className="p-2 text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )
+                  }
+                ]}
+                isLoading={false}
+              />
             </div>
           </div>
         )}
