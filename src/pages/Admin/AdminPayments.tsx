@@ -130,6 +130,56 @@ const AdminPayments: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Define columns for the payments table
+  const columns = [
+    {
+      header: 'Member',
+      accessor: 'member',
+      render: (value: Member) => `${value.first_name} ${value.last_name}`
+    },
+    {
+      header: 'Amount',
+      accessor: 'amount',
+      render: (value: number) => formatCurrency(value)
+    },
+    {
+      header: 'Date',
+      accessor: 'payment_date',
+      render: (value: string) => formatDate(value)
+    },
+    {
+      header: 'Method',
+      accessor: 'payment_method'
+    },
+    {
+      header: 'Notes',
+      accessor: 'notes'
+    },
+    {
+      header: 'Actions',
+      accessor: 'id',
+      render: (value: string, row: Payment) => (
+        <div className="flex space-x-2">
+          <Button
+            onClick={() => handleEdit(row)}
+            variant="outline"
+            size="sm"
+          >
+            Edit
+          </Button>
+          <Button
+            onClick={() => handleDelete(value)}
+            variant="outline"
+            size="sm"
+            className="text-red-600 hover:text-red-700"
+          >
+            Delete
+          </Button>
+        </div>
+      )
+    }
+  ];
+
   useEffect(() => {
     fetchMembers();
     fetchPayments();
@@ -655,16 +705,16 @@ const AdminPayments: React.FC = () => {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
+      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4 lg:mb-0">Payments</h1>
           <Button
             onClick={exportToCSV}
             variant="outline"
-            className="flex items-center"
+            className="w-full lg:w-auto"
           >
-            <Download className="h-4 w-4 mr-2" />
-            Export to CSV
+            <Download className="h-5 w-5 mr-2" />
+            Export CSV
           </Button>
         </div>
 
@@ -677,13 +727,14 @@ const AdminPayments: React.FC = () => {
           />
         )}
 
+        {/* Record Payment Form */}
         <Card className="mb-6">
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               {editingPayment ? 'Edit Payment' : 'Record Payment'}
             </h2>
-            <form onSubmit={editingPayment ? handleUpdate : handleSubmit} className="grid grid-cols-12 gap-4">
-              <div className="col-span-3">
+            <form onSubmit={editingPayment ? handleUpdate : handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
+              <div className="lg:col-span-3">
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Member <span className="text-accent-600">*</span>
@@ -693,10 +744,7 @@ const AdminPayments: React.FC = () => {
                       type="text"
                       ref={searchInputRef}
                       value={searchTerm}
-                      onChange={(e) => {
-                        setSearchTerm(e.target.value);
-                        setShowDropdown(true);
-                      }}
+                      onChange={(e) => handleMemberSearch(e.target.value)}
                       onKeyDown={handleSearchKeyDown}
                       onFocus={() => setShowDropdown(true)}
                       placeholder="Search members..."
@@ -736,7 +784,7 @@ const AdminPayments: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div className="col-span-2">
+              <div className="lg:col-span-2">
                 <TextField
                   id="amount-field"
                   label="Amount"
@@ -747,7 +795,7 @@ const AdminPayments: React.FC = () => {
                   required
                 />
               </div>
-              <div className="col-span-2">
+              <div className="lg:col-span-2">
                 <TextField
                   id="date-field"
                   label="Payment Date"
@@ -758,7 +806,7 @@ const AdminPayments: React.FC = () => {
                   required
                 />
               </div>
-              <div className="col-span-2">
+              <div className="lg:col-span-2">
                 <SelectField
                   id="method-field"
                   label="Payment Method"
@@ -769,7 +817,7 @@ const AdminPayments: React.FC = () => {
                   required
                 />
               </div>
-              <div className="col-span-2">
+              <div className="lg:col-span-2">
                 <TextField
                   id="notes-field"
                   label="Notes"
@@ -778,7 +826,7 @@ const AdminPayments: React.FC = () => {
                   className="w-full"
                 />
               </div>
-              <div className="col-span-1 flex items-end">
+              <div className="lg:col-span-1 flex items-end">
                 <Button
                   id="submit-btn"
                   type="submit"
@@ -796,71 +844,67 @@ const AdminPayments: React.FC = () => {
         {/* Summary Statistics */}
         <Card className="mb-6">
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="md:col-span-1">
-                <h3 className="text-sm font-medium text-gray-500">Date Range</h3>
-                <div className="mt-2 space-y-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-500">Start Date</label>
-                      <input
-                        type="date"
-                        value={tempStartDate}
-                        onChange={(e) => handleDateChange('start', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-500">End Date</label>
-                      <input
-                        type="date"
-                        value={tempEndDate}
-                        onChange={(e) => handleDateChange('end', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={handleApplyDateFilter}
-                      variant="primary"
-                      size="sm"
-                    >
-                      Apply Filter
-                    </Button>
-                  </div>
+            {/* Date Range Filter on its own row */}
+            <div className="w-full mb-6 flex flex-col md:flex-row md:items-end md:space-x-4">
+              <div className="flex-1 flex flex-col md:flex-row md:items-end md:space-x-4">
+                <div className="flex-1 mb-2 md:mb-0">
+                  <label className="block text-xs text-gray-500">Start Date</label>
+                  <input
+                    type="date"
+                    value={tempStartDate}
+                    onChange={(e) => handleDateChange('start', e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  />
+                </div>
+                <div className="flex-1 mb-2 md:mb-0">
+                  <label className="block text-xs text-gray-500">End Date</label>
+                  <input
+                    type="date"
+                    value={tempEndDate}
+                    onChange={(e) => handleDateChange('end', e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  />
+                </div>
+                <div className="flex-shrink-0">
+                  <Button
+                    onClick={handleApplyDateFilter}
+                    variant="primary"
+                    size="sm"
+                    className="w-full md:w-auto mt-2 md:mt-0"
+                  >
+                    Apply Filter
+                  </Button>
                 </div>
               </div>
-              <div className="md:col-span-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Total Contributions</h3>
-                    <p className="mt-2 text-2xl font-semibold text-gray-900">
-                      {formatCurrency(summaryStats.totalContributions)}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      in selected date range
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Recurring Donations</h3>
-                    <p className="mt-2 text-2xl font-semibold text-gray-900">
-                      {summaryStats.recurringPercentage.toFixed(1)}%
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      of members had recurring donations in {summaryStats.previousMonthName} {summaryStats.previousMonthYear}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Total Recurring Donations</h3>
-                    <p className="mt-2 text-2xl font-semibold text-gray-900">
-                      {formatCurrency(summaryStats.previousMonthRecurring)}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      in {summaryStats.previousMonthName} {summaryStats.previousMonthYear}
-                    </p>
-                  </div>
-                </div>
+            </div>
+            {/* Summary Metrics in a row below */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <h3 className="text-sm font-medium text-gray-500">Total Contributions</h3>
+                <p className="mt-2 text-2xl font-semibold text-gray-900">
+                  {formatCurrency(summaryStats.totalContributions)}
+                </p>
+                <p className="text-sm text-gray-500">
+                  in selected date range
+                </p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500">Recurring Donations</h3>
+                <p className="mt-2 text-2xl font-semibold text-gray-900">
+                  {summaryStats.recurringPercentage.toFixed(1)}%
+                </p>
+                <p className="text-sm text-gray-500">
+                  of members had recurring donations in {summaryStats.previousMonthName} {summaryStats.previousMonthYear}
+                </p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500">Total Recurring Donations</h3>
+                <p className="mt-2 text-2xl font-semibold text-gray-900">
+                  {formatCurrency(summaryStats.previousMonthRecurring)}
+                </p>
+                <p className="text-sm text-gray-500">
+                  in {summaryStats.previousMonthName} {summaryStats.previousMonthYear}
+                </p>
               </div>
             </div>
           </div>
@@ -868,43 +912,13 @@ const AdminPayments: React.FC = () => {
 
         <Card>
           <div className="p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment Records</h2>
             <DataTable
-              data={memberSummaries}
-              columns={[
-                {
-                  header: 'Member',
-                  accessor: 'member',
-                  render: (value: Member) => `${value.first_name} ${value.last_name}`
-                },
-                {
-                  header: 'Total Contributions',
-                  accessor: 'total_amount',
-                  render: (value: number) => formatCurrency(value)
-                },
-                {
-                  header: 'Payment Count',
-                  accessor: 'payment_count'
-                },
-                {
-                  header: 'Last Payment',
-                  accessor: 'last_payment_date',
-                  render: (value: string) => formatDate(value)
-                },
-                {
-                  header: 'Actions',
-                  accessor: 'member_id',
-                  render: (value: string, row: MemberPaymentSummary) => (
-                    <Button
-                      onClick={() => handleViewTransactions(value, row.member)}
-                      variant="outline"
-                      size="sm"
-                    >
-                      View Transactions
-                    </Button>
-                  )
-                }
-              ]}
-              isLoading={isLoading}
+              columns={columns}
+              data={payments}
+              searchable={true}
+              searchPlaceholder="Search payments..."
+              className="bg-white shadow rounded-lg"
             />
           </div>
         </Card>
