@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Layout from '../../components/Layout/Layout';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
@@ -124,14 +124,74 @@ const AdminPayments: React.FC = () => {
     notes: ''
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
-  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchMembers();
     fetchPayments();
     loadPaymentMethods();
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
+          searchInputRef.current && !searchInputRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+        setHighlightedIndex(-1);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const filteredMembers = members.filter(member => 
+    (member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     member.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && filteredMembers[highlightedIndex]) {
+        handleMemberSelect(filteredMembers[highlightedIndex]);
+      } else if (filteredMembers.length > 0) {
+        handleMemberSelect(filteredMembers[0]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => 
+        prev < filteredMembers.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => prev > 0 ? prev - 1 : prev);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowDropdown(false);
+      setHighlightedIndex(-1);
+      setSearchTerm('');
+      if (searchInputRef.current) {
+        searchInputRef.current.blur();
+      }
+    }
+  };
+
+  const handleMemberSelect = (member: Member) => {
+    setSelectedMember(member);
+    setSearchTerm('');
+    setShowDropdown(false);
+    setHighlightedIndex(-1);
+    if (searchInputRef.current) {
+      searchInputRef.current.blur();
+    }
+  };
 
   const fetchMembers = async () => {
     try {
@@ -632,33 +692,58 @@ const AdminPayments: React.FC = () => {
               {editingPayment ? 'Edit Payment' : 'Record Payment'}
             </h2>
             <form onSubmit={editingPayment ? handleUpdate : handleSubmit} className="grid grid-cols-12 gap-4">
-              <div className="col-span-3 relative">
-                <TextField
-                  label="Member"
-                  value={searchTerm}
-                  onChange={(e) => handleMemberSearch(e.target.value)}
-                  placeholder="Type to search members..."
-                  className="w-full"
-                  autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter' && filteredMembers.length > 0) { handleMemberSelect(filteredMembers[0]); e.preventDefault(); } }}
-                />
-                {showMemberDropdown && filteredMembers.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredMembers.map((member) => (
+              <div className="col-span-3">
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Member <span className="text-accent-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      ref={searchInputRef}
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setShowDropdown(true);
+                      }}
+                      onKeyDown={handleSearchKeyDown}
+                      onFocus={() => setShowDropdown(true)}
+                      placeholder="Search members..."
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    {showDropdown && filteredMembers.length > 0 && (
                       <div
-                        key={member.id}
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => {
-                          handleMemberSelect(member);
-                          setTimeout(() => document.getElementById('amount-field')?.focus(), 0);
-                        }}
+                        ref={dropdownRef}
+                        className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
                       >
-                        <div className="font-medium">{member.first_name} {member.last_name}</div>
-                        <div className="text-sm text-gray-500">{member.email}</div>
+                        {filteredMembers.map((member, index) => (
+                          <div
+                            key={member.id}
+                            className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
+                              index === highlightedIndex ? 'bg-gray-100' : ''
+                            }`}
+                            onClick={() => handleMemberSelect(member)}
+                          >
+                            <div className="font-medium">{member.first_name} {member.last_name}</div>
+                            <div className="text-sm text-gray-500">{member.email}</div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                  {selectedMember && (
+                    <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100">
+                      <span>{selectedMember.first_name} {selectedMember.last_name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMember(null)}
+                        className="ml-2 text-gray-500 hover:text-gray-700"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="col-span-2">
                 <TextField

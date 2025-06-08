@@ -7,9 +7,10 @@ import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
 import Badge from '../components/UI/Badge';
 import { User, Edit, X, LogOut } from 'lucide-react';
-import { getCurrentUser, getMemberByEmail, getMemberInterests, getMemberVolunteerHours, getMemberAttendance } from '../lib/supabase';
+import { getCurrentUser, getMemberByEmail, getMemberInterests, getMemberVolunteerHours, getMemberAttendance, getMemberPayments } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../lib/pickLists';
+import { format } from 'date-fns';
 
 interface MemberData {
   id: string;
@@ -75,11 +76,12 @@ const AccountPage: React.FC = () => {
   const [memberData, setMemberData] = useState<MemberData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
-  const [activeTab, setActiveTab] = useState<'profile' | 'interests' | 'volunteer' | 'attendance'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'interests' | 'volunteer' | 'payments'>('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<Partial<MemberData>>({});
   const [availableInterests, setAvailableInterests] = useState<Array<{ id: string; name: string; category: { id: string; name: string; } }>>([]);
   const [shirtSizes, setShirtSizes] = useState<Array<{value: string, label: string}>>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -109,12 +111,13 @@ const AccountPage: React.FC = () => {
         
         // Fetch additional member data
         console.log('Fetching additional member data for ID:', member.id);
-        const [interests, volunteerHours, attendance] = await Promise.all([
+        const [interests, volunteerHours, attendance, paymentsResult] = await Promise.all([
           getMemberInterests(member.id),
           getMemberVolunteerHours(member.id),
-          getMemberAttendance(member.id)
+          getMemberAttendance(member.id),
+          getMemberPayments(member.id)
         ]);
-        console.log('Additional data:', { interests, volunteerHours, attendance });
+        console.log('Additional data:', { interests, volunteerHours, attendance, paymentsResult });
 
         // Fetch shirt sizes
         const shirtValues = await getPickListValues(PICK_LIST_CATEGORIES.TSHIRT_SIZES);
@@ -131,8 +134,10 @@ const AccountPage: React.FC = () => {
             id: a.id,
             date: a.meetings.date,
             meeting_type: a.meetings.title
-          })) || []
+          })) || [],
+          payments: paymentsResult.payments || []
         });
+        setPayments(paymentsResult.payments || []);
       } catch (error) {
         console.error('Error:', error);
         setAlert({
@@ -294,6 +299,25 @@ const AccountPage: React.FC = () => {
         message: 'Failed to log out. Please try again.'
       });
     }
+  };
+
+  const getMembershipTerm = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth(); // 0-11
+    const currentYear = now.getFullYear();
+    let start, end, label;
+    if (currentMonth < 9) {
+      // Jan-Sept: Oct 1 previous year - Dec 31 current year
+      start = new Date(currentYear - 1, 9, 1); // Oct 1 prev year
+      end = new Date(currentYear, 11, 31); // Dec 31 current year
+      label = `${currentYear} Membership Period`;
+    } else {
+      // Oct-Dec: Oct 1 current year - Dec 31 next year
+      start = new Date(currentYear, 9, 1); // Oct 1 current year
+      end = new Date(currentYear + 1, 11, 31); // Dec 31 next year
+      label = `${currentYear + 1} Membership Period`;
+    }
+    return { start, end, label };
   };
 
   const renderTabContent = () => {
@@ -665,24 +689,44 @@ const AccountPage: React.FC = () => {
           </div>
         );
 
-      case 'attendance':
+      case 'payments': {
+        const { start, end, label } = getMembershipTerm();
+        const paymentsInTerm = payments.filter(p => {
+          const d = new Date(p.date);
+          return d >= start && d <= end;
+        });
+        const total = paymentsInTerm.reduce((sum, p) => sum + (p.amount || 0), 0);
         return (
           <div className="p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Meeting Attendance</h3>
-            {memberData?.attendance.length ? (
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Payments</h3>
+            <div className="mb-4">
+              <span className="font-semibold">{label}:</span> Total this membership term: <span className="font-bold text-primary-700">${total.toFixed(2)}</span>
+            </div>
+            {payments.length ? (
               <div className="space-y-4">
-                {memberData.attendance.map((record) => (
-                  <div key={record.id} className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-gray-900">{record.meeting_type}</h4>
-                    <p className="text-sm text-gray-500">{new Date(record.date).toLocaleDateString()}</p>
+                {payments.map((payment) => (
+                  <div key={payment.id} className={`bg-gray-50 p-4 rounded-lg ${paymentsInTerm.includes(payment) ? '' : 'opacity-50'}`}>
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{payment.payment_method}</h4>
+                        <p className="text-sm text-gray-500">{new Date(payment.date).toLocaleDateString()}</p>
+                        <p className="text-sm text-gray-500">Status: {payment.status}</p>
+                        {payment.notes && <p className="text-sm text-gray-500">Notes: {payment.notes}</p>}
+                        {payment.is_recurring && <span className="text-xs text-blue-600 ml-2">Recurring</span>}
+                      </div>
+                      <div className="mt-2 md:mt-0 font-semibold text-primary-700">
+                        {payment.amount?.toFixed(2)}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500">No meeting attendance recorded yet.</p>
+              <p className="text-gray-500">No payments recorded yet.</p>
             )}
           </div>
         );
+      }
     }
   };
 
@@ -747,49 +791,49 @@ const AccountPage: React.FC = () => {
         <div className="bg-white shadow rounded-lg">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px">
-            <button
+              <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                activeTab === 'profile'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                  activeTab === 'profile'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
                 onClick={() => setActiveTab('profile')}
-            >
-              Profile
-            </button>
-            <button
+              >
+                Profile
+              </button>
+              <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                activeTab === 'interests'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                  activeTab === 'interests'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
                 onClick={() => setActiveTab('interests')}
-            >
-              Interests
-            </button>
-            <button
+              >
+                Interests
+              </button>
+              <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                activeTab === 'volunteer'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                  activeTab === 'volunteer'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
                 onClick={() => setActiveTab('volunteer')}
-            >
-              Volunteer Hours
-            </button>
-            <button
+              >
+                Volunteer Hours
+              </button>
+              <button
                 className={`w-1/4 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                  activeTab === 'attendance'
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-                onClick={() => setActiveTab('attendance')}
-            >
-                Attendance
-            </button>
-          </nav>
-        </div>
-        
+                  activeTab === 'payments'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab('payments')}
+              >
+                Payments
+              </button>
+            </nav>
+          </div>
+          
           {renderTabContent()}
         </div>
       </div>

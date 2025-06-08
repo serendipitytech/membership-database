@@ -217,3 +217,13 @@ export const getMemberAttendance = async (memberId: string) => {
   
   return { attendance: data, error };
 };
+
+// Payment functions
+export const getMemberPayments = async (memberId: string) => {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('member_id', memberId)
+    .order('date', { ascending: false });
+  return { payments: data, error };
+};
