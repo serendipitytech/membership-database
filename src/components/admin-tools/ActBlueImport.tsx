@@ -128,6 +128,7 @@ const ActBlueImport: React.FC = () => {
     unclassified: false
   });
   const [importProgress, setImportProgress] = useState<Progress | null>(null);
+  const [skippedDuplicates, setSkippedDuplicates] = useState<number>(0);
 
   // Fetch all members on component mount
   useEffect(() => {
@@ -333,25 +334,39 @@ const ActBlueImport: React.FC = () => {
       const headers = rows[0];
       const data = rows.slice(1);
       setProgress({ current: 0, total: data.length, message: 'Processing payments...' });
-      // Fetch members for auto-matching
-      const { data: memberList } = await supabase
-        .from('members')
-        .select('id, email');
+      // Gather all receipt IDs from the CSV
+      const receiptIdsFromCsv = data.map(row => row[headers.indexOf('Receipt ID')]).filter(Boolean);
+      // Query Supabase for existing payments with these receipt IDs
+      const { data: existingPayments, error: existingError } = await supabase
+        .from('payments')
+        .select('receipt_id')
+        .in('receipt_id', receiptIdsFromCsv);
+      if (existingError) {
+        throw existingError;
+      }
+      const existingReceiptIds = new Set((existingPayments || []).map(p => p.receipt_id));
+      // Filter out duplicates
+      let skipped = 0;
       const imported: UnmatchedPayment[] = [];
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
         if (row.length < headers.length) continue;
         const receiptId = row[headers.indexOf('Receipt ID')];
         if (!receiptId) continue;
+        if (existingReceiptIds.has(receiptId)) {
+          skipped++;
+          continue;
+        }
         const email = row[headers.indexOf('Donor Email')];
         if (!email) continue;
         // Auto-match by email
+        const { data: memberList } = await supabase
+          .from('members')
+          .select('id, email');
         const match = memberList?.find(m => m.email?.trim().toLowerCase() === email.trim().toLowerCase());
         // Trim whitespace from Kind and Recurring Type
         const kind = row[headers.indexOf('Kind')]?.trim() || '';
         const recurringType = row[headers.indexOf('Recurring Type')]?.trim() || '';
-        // Debug: Log the recurringType and kind values
-        console.log(`Importing payment: ReceiptID=${receiptId}, RecurringType='${recurringType}', Kind='${kind}'`);
         imported.push({
           receiptId,
           date: row[headers.indexOf('Date')],
@@ -375,9 +390,10 @@ const ActBlueImport: React.FC = () => {
         setProgress((prev: Progress | null) => prev ? { ...prev, current: i + 1 } : null);
       }
       setAllPayments(imported);
+      setSkippedDuplicates(skipped);
       setAlert({
         type: 'success',
-        message: `Found ${imported.length} new payments to process. Please review and match them with existing members or create new members below.`
+        message: `Found ${imported.length} new payments to process. ${skipped > 0 ? skipped + ' duplicate payments were skipped.' : ''} Please review and match them with existing members or create new members below.`
       });
     } catch (error) {
       console.error('Error processing ActBlue file:', error);
@@ -387,7 +403,6 @@ const ActBlueImport: React.FC = () => {
       });
     } finally {
       setIsProcessing(false);
-      setProgress(null);
     }
   };
 
