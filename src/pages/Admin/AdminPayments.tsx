@@ -99,13 +99,13 @@ const AdminPayments: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [amount, setAmount] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<string>('');
+  const [amount, setAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentMethods, setPaymentMethods] = useState<Array<{value: string, label: string}>>([]);
-  const [notes, setNotes] = useState<string>('');
-  const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
-  const [isRecurring, setIsRecurring] = useState<boolean>(false);
-  const [alert, setAlert] = useState<AlertState | null>(null);
+  const [notes, setNotes] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -126,6 +126,7 @@ const AdminPayments: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -150,12 +151,6 @@ const AdminPayments: React.FC = () => {
     };
   }, []);
 
-  const filteredMembers = members.filter(member => 
-    (member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     member.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -166,12 +161,12 @@ const AdminPayments: React.FC = () => {
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex(prev => 
+      setHighlightedIndex((prev: number) => 
         prev < filteredMembers.length - 1 ? prev + 1 : prev
       );
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex(prev => prev > 0 ? prev - 1 : prev);
+      setHighlightedIndex((prev: number) => prev > 0 ? prev - 1 : prev);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setShowDropdown(false);
@@ -183,15 +178,50 @@ const AdminPayments: React.FC = () => {
     }
   };
 
+  const handleMemberSearch = (searchValue: string) => {
+    setSearchTerm(searchValue);
+    if (searchValue.length >= 2) {
+      const filtered = members.filter(member => 
+        `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchValue.toLowerCase()) ||
+        member.email.toLowerCase().includes(searchValue.toLowerCase())
+      );
+      setFilteredMembers(filtered);
+      setShowDropdown(true);
+    } else {
+      setFilteredMembers([]);
+      setShowDropdown(false);
+    }
+  };
+
   const handleMemberSelect = (member: Member) => {
     setSelectedMember(member);
-    setSearchTerm('');
+    setFormData(prev => ({
+      ...prev,
+      member_id: member.id
+    }));
+    setSearchTerm(`${member.first_name} ${member.last_name}`);
     setShowDropdown(false);
     setHighlightedIndex(-1);
     if (searchInputRef.current) {
       searchInputRef.current.blur();
     }
   };
+
+  // After successful submit, clear the form and re-focus member field
+  useEffect(() => {
+    if (alert && alert.type === 'success') {
+      setSelectedMember(null);
+      setSearchTerm('');
+      setAmount('');
+      setPaymentMethod('');
+      setNotes('');
+      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+      const input = document.querySelector('input[placeholder="Type to search members..."]') as HTMLInputElement;
+      if (input) {
+        setTimeout(() => input.focus(), 0);
+      }
+    }
+  }, [alert]);
 
   const fetchMembers = async () => {
     try {
@@ -605,45 +635,6 @@ const AdminPayments: React.FC = () => {
     setStartDate(tempStartDate);
     setEndDate(tempEndDate);
   };
-
-  // Add new function for member search
-  const handleMemberSearch = (searchValue: string) => {
-    setSearchTerm(searchValue);
-    if (searchValue.length >= 2) {
-      const filtered = members.filter(member => 
-        `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchValue.toLowerCase()) ||
-        member.email.toLowerCase().includes(searchValue.toLowerCase())
-      );
-      setFilteredMembers(filtered);
-      setShowMemberDropdown(true);
-    } else {
-      setFilteredMembers([]);
-      setShowMemberDropdown(false);
-    }
-  };
-
-  const handleMemberSelect = (member: Member) => {
-    setSelectedMember(member);
-    setFormData(prev => ({
-      ...prev,
-      member_id: member.id
-    }));
-    setSearchTerm(`${member.first_name} ${member.last_name}`);
-    setShowMemberDropdown(false);
-  };
-
-  // After successful submit, clear the form and re-focus member field
-  useEffect(() => {
-    if (alert && alert.type === 'success') {
-      setSelectedMember(null);
-      setSearchTerm('');
-      setAmount('');
-      setPaymentMethod('');
-      setNotes('');
-      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
-      setTimeout(() => document.querySelector('input[placeholder="Type to search members..."]')?.focus(), 0);
-    }
-  }, [alert]);
 
   if (isLoading) {
     return (
