@@ -58,14 +58,13 @@ interface Member {
   }>;
   membershipStatus?: 'Active' | 'Inactive' | 'Pending';
   precinct: string;
-  free_text: string;
+  tell_us_more: string;
   voter_id?: string;
   date_of_birth?: string;
   tshirt_size?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   emergency_contact_relationship?: string;
-  tell_us_more?: string;
   special_skills?: string;
   health_issues?: string;
   household_id?: string;
@@ -104,6 +103,15 @@ const AdminMembers: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [householdCounts, setHouseholdCounts] = useState<{[householdId: string]: number}>({});
+  const [sortField, setSortField] = useState<'last_name' | 'first_name' | 'email' | 'status'>('last_name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const sortOptions = [
+    { value: 'last_name', label: 'Last Name' },
+    { value: 'first_name', label: 'First Name' },
+    { value: 'email', label: 'Email' },
+    { value: 'status', label: 'Status' },
+  ];
 
   const initializeInterestData = async () => {
     try {
@@ -369,7 +377,6 @@ const AdminMembers: React.FC = () => {
   const handleEditMember = (member: Member) => {
     setSelectedMember({
       ...member,
-      // Ensure all fields have string values or undefined
       first_name: member.first_name || '',
       last_name: member.last_name || '',
       email: member.email || '',
@@ -379,7 +386,7 @@ const AdminMembers: React.FC = () => {
       state: member.state || '',
       zip: member.zip || '',
       precinct: member.precinct || '',
-      free_text: member.free_text || '',
+      tell_us_more: member.tell_us_more || '',
       interests: member.interests || []
     });
     setShowEditModal(true);
@@ -403,7 +410,7 @@ const AdminMembers: React.FC = () => {
           state: selectedMember.state,
           zip: selectedMember.zip,
           precinct: selectedMember.precinct,
-          free_text: selectedMember.free_text
+          tell_us_more: selectedMember.tell_us_more
         })
         .eq('id', selectedMember.id);
 
@@ -776,6 +783,21 @@ const AdminMembers: React.FC = () => {
     return matchesSearch && matchesInterests && matchesStatus && matchesPrecinct;
   });
 
+  const sortedMembers = [...filteredMembers].sort((a, b) => {
+    let aValue = a[sortField] || '';
+    let bValue = b[sortField] || '';
+    if (sortField === 'status') {
+      aValue = (a.membershipStatus || '').toLowerCase();
+      bValue = (b.membershipStatus || '').toLowerCase();
+    } else {
+      aValue = (aValue || '').toLowerCase();
+      bValue = (bValue || '').toLowerCase();
+    }
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   const renderMemberCard = (member: Member) => {
     const interests = member.interests || [];
     const displayInterests = interests.length > 0 ? interests.slice(0, 3) : [];
@@ -924,7 +946,7 @@ const AdminMembers: React.FC = () => {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Members</h1>
           <div className="flex items-center space-x-4">
             <div className="relative">
@@ -992,7 +1014,7 @@ const AdminMembers: React.FC = () => {
                   meeting_attendance: [],
                   payments: [],
                   precinct: '',
-                  free_text: ''
+                  tell_us_more: ''
                 });
                 setIsCreating(true);
               }}
@@ -1092,6 +1114,29 @@ const AdminMembers: React.FC = () => {
           </Card>
         )}
 
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <label className="mr-2 text-sm font-medium">Sort by:</label>
+            <select
+              className="border rounded px-2 py-1 text-sm"
+              value={sortField}
+              onChange={e => setSortField(e.target.value as any)}
+            >
+              {sortOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <button
+              className="ml-2 text-sm text-gray-600 hover:text-gray-900"
+              onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+              title={`Sort ${sortDirection === 'asc' ? 'Descending' : 'Ascending'}`}
+              type="button"
+            >
+              {sortDirection === 'asc' ? '▲' : '▼'}
+            </button>
+          </div>
+        </div>
+
         <div className="space-y-6">
           {isLoading ? (
             <div className="text-center py-12">
@@ -1102,14 +1147,14 @@ const AdminMembers: React.FC = () => {
             <>
               {viewMode === 'card' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filteredMembers
+                  {sortedMembers
                     .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
                     .map(renderMemberCard)}
                 </div>
               ) : (
                 <Card>
                   <div className="divide-y divide-gray-200">
-                    {filteredMembers
+                    {sortedMembers
                       .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
                       .map(renderMemberList)}
                   </div>
@@ -1117,7 +1162,7 @@ const AdminMembers: React.FC = () => {
               )}
 
               {/* Pagination */}
-              {filteredMembers.length > membersPerPage && (
+              {sortedMembers.length > membersPerPage && (
                 <div className="flex justify-center mt-8">
                   <nav className="flex items-center space-x-2">
                     <Button
@@ -1128,12 +1173,12 @@ const AdminMembers: React.FC = () => {
                       Previous
                     </Button>
                     <span className="text-sm text-gray-600">
-                      Page {currentPage} of {Math.ceil(filteredMembers.length / membersPerPage)}
+                      Page {currentPage} of {Math.ceil(sortedMembers.length / membersPerPage)}
                     </span>
                     <Button
                       variant="outline"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredMembers.length / membersPerPage)))}
-                      disabled={currentPage === Math.ceil(filteredMembers.length / membersPerPage)}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(sortedMembers.length / membersPerPage)))}
+                      disabled={currentPage === Math.ceil(sortedMembers.length / membersPerPage)}
                     >
                       Next
                     </Button>
@@ -1470,9 +1515,9 @@ const AdminMembers: React.FC = () => {
                     Additional Information
                   </label>
                   <textarea
-                    name="free_text"
-                    value={selectedMember.free_text || ''}
-                    onChange={(e) => setSelectedMember({...selectedMember, free_text: e.target.value})}
+                    name="tell_us_more"
+                    value={selectedMember.tell_us_more || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, tell_us_more: e.target.value})}
                     rows={4}
                     className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   />
