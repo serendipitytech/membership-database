@@ -123,6 +123,9 @@ const AdminPayments: React.FC = () => {
     is_recurring: false,
     notes: ''
   });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
 
   useEffect(() => {
     fetchMembers();
@@ -543,6 +546,45 @@ const AdminPayments: React.FC = () => {
     setEndDate(tempEndDate);
   };
 
+  // Add new function for member search
+  const handleMemberSearch = (searchValue: string) => {
+    setSearchTerm(searchValue);
+    if (searchValue.length >= 2) {
+      const filtered = members.filter(member => 
+        `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchValue.toLowerCase()) ||
+        member.email.toLowerCase().includes(searchValue.toLowerCase())
+      );
+      setFilteredMembers(filtered);
+      setShowMemberDropdown(true);
+    } else {
+      setFilteredMembers([]);
+      setShowMemberDropdown(false);
+    }
+  };
+
+  const handleMemberSelect = (member: Member) => {
+    setSelectedMember(member);
+    setFormData(prev => ({
+      ...prev,
+      member_id: member.id
+    }));
+    setSearchTerm(`${member.first_name} ${member.last_name}`);
+    setShowMemberDropdown(false);
+  };
+
+  // After successful submit, clear the form and re-focus member field
+  useEffect(() => {
+    if (alert && alert.type === 'success') {
+      setSelectedMember(null);
+      setSearchTerm('');
+      setAmount('');
+      setPaymentMethod('');
+      setNotes('');
+      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+      setTimeout(() => document.querySelector('input[placeholder="Type to search members..."]')?.focus(), 0);
+    }
+  }, [alert]);
+
   if (isLoading) {
     return (
       <Layout>
@@ -590,91 +632,85 @@ const AdminPayments: React.FC = () => {
               {editingPayment ? 'Edit Payment' : 'Record Payment'}
             </h2>
             <form onSubmit={editingPayment ? handleUpdate : handleSubmit} className="grid grid-cols-12 gap-4">
-              <div className="col-span-3">
-                <SelectField
+              <div className="col-span-3 relative">
+                <TextField
                   label="Member"
-                  value={selectedMember?.id || ''}
-                  onChange={(e) => setSelectedMember(members.find(m => m.id === e.target.value) || null)}
-                  options={members.map(member => ({
-                    value: member.id,
-                    label: `${member.first_name} ${member.last_name}`
-                  }))}
-                  required
+                  value={searchTerm}
+                  onChange={(e) => handleMemberSearch(e.target.value)}
+                  placeholder="Type to search members..."
+                  className="w-full"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter' && filteredMembers.length > 0) { handleMemberSelect(filteredMembers[0]); e.preventDefault(); } }}
                 />
+                {showMemberDropdown && filteredMembers.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {filteredMembers.map((member) => (
+                      <div
+                        key={member.id}
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          handleMemberSelect(member);
+                          setTimeout(() => document.getElementById('amount-field')?.focus(), 0);
+                        }}
+                      >
+                        <div className="font-medium">{member.first_name} {member.last_name}</div>
+                        <div className="text-sm text-gray-500">{member.email}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="col-span-2">
                 <TextField
+                  id="amount-field"
                   label="Amount"
                   type="number"
-                  step="0.01"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={e => setAmount(e.target.value)}
+                  className="w-full"
                   required
                 />
               </div>
               <div className="col-span-2">
                 <TextField
+                  id="date-field"
                   label="Payment Date"
                   type="date"
                   value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
+                  onChange={e => setPaymentDate(e.target.value)}
+                  className="w-full"
                   required
                 />
               </div>
               <div className="col-span-2">
                 <SelectField
+                  id="method-field"
                   label="Payment Method"
                   value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  options={[
-                    { value: '', label: 'Select payment method' },
-                    ...paymentMethods
-                  ]}
+                  onChange={e => setPaymentMethod(e.target.value)}
+                  options={paymentMethods}
+                  className="w-full"
                   required
                 />
               </div>
-              <div className="col-span-3">
+              <div className="col-span-2">
                 <TextField
+                  id="notes-field"
                   label="Notes"
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  onChange={e => setNotes(e.target.value)}
+                  className="w-full"
                 />
               </div>
-              <div className="col-span-12">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_recurring"
-                    checked={isRecurring}
-                    onChange={(e) => setIsRecurring(e.target.checked)}
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="is_recurring" className="ml-2 block text-sm text-gray-700">
-                    This is a recurring payment
-                  </label>
-                </div>
-              </div>
-              <div className="col-span-12 flex justify-end">
-                {editingPayment && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setEditingPayment(null);
-                      setSelectedMember(null);
-                      setAmount('');
-                      setPaymentMethod('');
-                      setNotes('');
-                      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
-                      setIsRecurring(false);
-                    }}
-                    className="mr-2"
-                  >
-                    Cancel
-                  </Button>
-                )}
-                <Button type="submit" variant="primary">
-                  {editingPayment ? 'Update Payment' : 'Record Payment'}
+              <div className="col-span-1 flex items-end">
+                <Button
+                  id="submit-btn"
+                  type="submit"
+                  variant="primary"
+                  className="w-full"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Saving...' : (editingPayment ? 'Update' : 'Add Payment')}
                 </Button>
               </div>
             </form>

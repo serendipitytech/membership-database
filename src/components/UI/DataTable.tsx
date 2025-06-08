@@ -17,6 +17,17 @@ interface DataTableProps<T> {
   pageSize?: number;
 }
 
+// Helper function to recursively search string fields in an object
+function objectContainsTerm(obj: any, term: string): boolean {
+  if (typeof obj === 'string') {
+    return obj.toLowerCase().includes(term);
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    return Object.values(obj).some(value => objectContainsTerm(value, term));
+  }
+  return false;
+}
+
 function DataTable<T extends Record<string, any>>({
   columns,
   data,
@@ -36,7 +47,7 @@ function DataTable<T extends Record<string, any>>({
   const filteredData = useMemo(() => {
     return data.filter((row) => {
       return Object.values(row).some((value) =>
-        String(value).toLowerCase().includes(searchTerm.toLowerCase())
+        objectContainsTerm(value, searchTerm.toLowerCase())
       );
     });
   }, [data, searchTerm]);
