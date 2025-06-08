@@ -702,33 +702,19 @@ const ImportManager: React.FC = () => {
       }
 
       // Update all existing members with this email to be part of the household
-      const { error: updateError } = await supabase
-        .from('members')
-        .update({
-          household_id: household.id,
-          has_login: false,
-          is_primary_contact: false
-        })
-        .eq('email', email);
-
-      if (updateError) throw new Error('Failed to update existing members');
-
-      // Set the selected member as login/primary
-      const primaryIndex = selectedPrimaryContact[email];
-      if (primaryIndex === undefined) throw new Error('No primary contact selected');
-      
-      const primaryMember = members[primaryIndex];
-      const { error: primaryError } = await supabase
-        .from('members')
-        .update({
-          has_login: true,
-          is_primary_contact: true
-        })
-        .eq('email', email)
-        .eq('first_name', primaryMember.first_name)
-        .eq('last_name', primaryMember.last_name);
-
-      if (primaryError) throw new Error('Failed to set primary contact');
+      for (let i = 0; i < members.length; i++) {
+        const member = members[i];
+        const isPrimary = i === selectedPrimaryContact[email];
+        // Upsert member (insert or update by email + name)
+        await supabase
+          .from('members')
+          .upsert({
+            ...member,
+            household_id: household.id,
+            is_primary_contact: isPrimary,
+            has_login: isPrimary
+          }, { onConflict: ['email', 'first_name', 'last_name'] });
+      }
 
       // Remove these rows from processedRows and update state
       const toRemove = new Set(group.rowIndexes);
@@ -1202,6 +1188,26 @@ const ImportManager: React.FC = () => {
         <Card>
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Resolve Duplicates with Existing Members</h3>
+            <div className="flex justify-end space-x-4 mb-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const allSkips = Object.fromEntries(dbDuplicateGroups.map(d => [d.email, 'skip']));
+                  setDbDupeResolutions(allSkips);
+                }}
+              >
+                Skip All
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const allMerges = Object.fromEntries(dbDuplicateGroups.map(d => [d.email, 'merge']));
+                  setDbDupeResolutions(allMerges);
+                }}
+              >
+                Update All
+              </Button>
+            </div>
             <div className="space-y-8">
               {dbDuplicateGroups.map((group: { email: string; imported: any; existing: any }, i: number) => (
                 <div key={group.email} className="border rounded-lg p-4">
