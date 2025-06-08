@@ -103,6 +103,8 @@ const ImportManager: React.FC = () => {
   const [importComplete, setImportComplete] = useState(false);
   const [importResults, setImportResults] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
+  const [convertingHousehold, setConvertingHousehold] = useState<string | null>(null);
+  const [householdConvertLoading, setHouseholdConvertLoading] = useState(false);
 
   // Load saved mappings and membership types
   useEffect(() => {
@@ -635,6 +637,66 @@ const ImportManager: React.FC = () => {
     }
   };
 
+  // Build a map of email -> array of row indexes for all processed rows
+  const buildFileDuplicateGroups = (processedRows: any[]) => {
+    const emailToIndexes: { [email: string]: number[] } = {};
+    processedRows.forEach((row, idx) => {
+      if (!row.email) return;
+      if (!emailToIndexes[row.email]) emailToIndexes[row.email] = [];
+      emailToIndexes[row.email].push(idx);
+    });
+    // Only include groups with more than one record
+    return Object.entries(emailToIndexes)
+      .filter(([email, indexes]) => indexes.length > 1)
+      .map(([email, indexes]) => ({ email, rowIndexes: indexes }));
+  };
+
+  // Handler to convert duplicate group to household
+  const handleConvertToHousehold = async (email: string) => {
+    setConvertingHousehold(email);
+    setHouseholdConvertLoading(true);
+    try {
+      // Find all records with this email
+      const group = fileDuplicateGroups.find(g => g.email === email);
+      if (!group) throw new Error('Duplicate group not found');
+      const members = group.rowIndexes.map(idx => processedRows[idx]);
+
+      // Create household
+      const { data: household, error: householdError } = await supabase
+        .from('households')
+        .insert({ email })
+        .select()
+        .single();
+      if (householdError || !household) throw new Error('Failed to create household');
+
+      // For now, default first member as login/primary
+      for (let i = 0; i < members.length; i++) {
+        await supabase.from('members').insert({
+          ...members[i],
+          household_id: household.id,
+          has_login: i === 0,
+          is_primary_contact: i === 0,
+        });
+      }
+
+      // Remove these rows from processedRows and update state
+      const toRemove = new Set(group.rowIndexes);
+      setProcessedRows(prev => prev.filter((_, idx) => !toRemove.has(idx)));
+      setFileDuplicateGroups(prev => prev.filter(g => g.email !== email));
+      setFileDupeResolutions(prev => {
+        const copy = { ...prev };
+        delete copy[email];
+        return copy;
+      });
+      setAlert({ type: 'success', message: `Created household and imported ${members.length} members.` });
+    } catch (error: any) {
+      setAlert({ type: 'error', message: error.message || 'Failed to convert to household.' });
+    } finally {
+      setConvertingHousehold(null);
+      setHouseholdConvertLoading(false);
+    }
+  };
+
   return (
     <div ref={topRef} className="max-w-7xl mx-auto space-y-6">
       {/* Progress Bar */}
@@ -997,46 +1059,49 @@ const ImportManager: React.FC = () => {
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Resolve Duplicates in Uploaded File</h3>
             <div className="space-y-8">
-              {fileDuplicateGroups.map((group: { email: string; rowIndexes: number[] }, i: number) => (
+              {buildFileDuplicateGroups(processedRows).map((group: { email: string; rowIndexes: number[] }, i: number) => (
                 <div key={group.email} className="border rounded-lg p-4">
-                  <div className="mb-2 font-semibold text-gray-700">Email: {group.email}</div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 mb-2">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">Select</th>
-                          {MEMBER_FIELDS.map((field: { id: string; label: string; required: boolean }, idx: number) => (
-                            <th key={field.id} className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{field.label}</th>
+                  <div className="mb-4 font-semibold text-gray-700">Email: {group.email}</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {group.rowIndexes.map((idx: number) => (
+                      <div key={idx} className="border rounded-lg p-4 bg-white">
+                        <div className="flex justify-between items-start mb-4">
+                          <h4 className="font-medium text-gray-900">Record {idx + 1}</h4>
+                          <Button
+                            variant={fileDupeResolutions[group.email] === idx ? 'primary' : 'outline'}
+                            onClick={() => handleResolveFileDupe(group.email, idx)}
+                          >
+                            {fileDupeResolutions[group.email] === idx ? 'Selected' : 'Keep This Record'}
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {MEMBER_FIELDS.map((field: { id: string; label: string; required: boolean }) => (
+                            processedRows[idx][field.id] && (
+                              <div key={field.id}>
+                                <span className="text-sm font-medium text-gray-500">{field.label}:</span>
+                                <p className="text-sm text-gray-900">{processedRows[idx][field.id]}</p>
+                              </div>
+                            )
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.rowIndexes.map((idx: number) => (
-                          <tr key={idx} className="bg-white">
-                            <td className="px-4 py-2 text-center">
-                              <input
-                                type="radio"
-                                name={`dupe-${group.email}`}
-                                checked={fileDupeResolutions[group.email] === idx}
-                                onChange={() => handleResolveFileDupe(group.email, idx)}
-                              />
-                              <div className="text-xs text-gray-400">Keep</div>
-                              <input
-                                type="radio"
-                                name={`dupe-${group.email}`}
-                                checked={fileDupeResolutions[group.email] === null}
-                                onChange={() => handleResolveFileDupe(group.email, null)}
-                                className="ml-2"
-                              />
-                              <div className="text-xs text-gray-400">Skip</div>
-                            </td>
-                            {MEMBER_FIELDS.map((field: { id: string; label: string; required: boolean }, cellIndex: number) => (
-                              <td key={cellIndex} className="px-4 py-2 text-sm text-gray-500 whitespace-nowrap">{processedRows[idx][field.id]}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex justify-end space-x-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleResolveFileDupe(group.email, null)}
+                    >
+                      Skip All Records
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      loading={convertingHousehold === group.email && householdConvertLoading}
+                      onClick={() => handleConvertToHousehold(group.email)}
+                      disabled={householdConvertLoading}
+                    >
+                      Convert to Household
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -1062,22 +1127,47 @@ const ImportManager: React.FC = () => {
             <div className="space-y-8">
               {dbDuplicateGroups.map((group: { email: string; imported: any; existing: any }, i: number) => (
                 <div key={group.email} className="border rounded-lg p-4">
-                  <div className="mb-2 font-semibold text-gray-700">Email: {group.email}</div>
-                  <div className="overflow-x-auto mb-2">
-                    {renderComparisonTable(group.imported, group.existing)}
+                  <div className="mb-4 font-semibold text-gray-700">Email: {group.email}</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="border rounded-lg p-4 bg-white">
+                      <h4 className="font-medium text-gray-900 mb-4">Existing Record</h4>
+                      <div className="space-y-2">
+                        {MEMBER_FIELDS.map((field: { id: string; label: string; required: boolean }) => (
+                          group.existing[field.id] && (
+                            <div key={field.id}>
+                              <span className="text-sm font-medium text-gray-500">{field.label}:</span>
+                              <p className="text-sm text-gray-900">{group.existing[field.id]}</p>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    </div>
+                    <div className="border rounded-lg p-4 bg-white">
+                      <h4 className="font-medium text-gray-900 mb-4">Imported Record</h4>
+                      <div className="space-y-2">
+                        {MEMBER_FIELDS.map((field: { id: string; label: string; required: boolean }) => (
+                          group.imported[field.id] && (
+                            <div key={field.id}>
+                              <span className="text-sm font-medium text-gray-500">{field.label}:</span>
+                              <p className="text-sm text-gray-900">{group.imported[field.id]}</p>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-4">
+                  <div className="mt-4 flex justify-end space-x-4">
                     <Button
                       variant={dbDupeResolutions[group.email] === 'merge' ? 'primary' : 'outline'}
                       onClick={() => handleResolveDbDupe(group.email, 'merge')}
                     >
-                      Merge (Update Existing)
+                      Update Existing Record
                     </Button>
                     <Button
                       variant={dbDupeResolutions[group.email] === 'skip' ? 'danger' : 'outline'}
                       onClick={() => handleResolveDbDupe(group.email, 'skip')}
                     >
-                      Skip
+                      Skip Import
                     </Button>
                   </div>
                 </div>
