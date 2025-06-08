@@ -7,7 +7,7 @@ import Alert from '../../components/UI/Alert';
 import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
 import CheckboxGroup from '../../components/Form/CheckboxGroup';
-import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight, Grid, List, HelpCircle, X } from 'lucide-react';
+import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight, Grid, List, HelpCircle, X, Home } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
@@ -68,6 +68,7 @@ interface Member {
   tell_us_more?: string;
   special_skills?: string;
   health_issues?: string;
+  household_id?: string;
 }
 
 interface InterestCategory {
@@ -102,6 +103,7 @@ const AdminMembers: React.FC = () => {
   const [precinctOptions, setPrecinctOptions] = useState<Array<{value: string, label: string}>>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [householdCounts, setHouseholdCounts] = useState<{[householdId: string]: number}>({});
 
   const initializeInterestData = async () => {
     try {
@@ -234,7 +236,7 @@ const AdminMembers: React.FC = () => {
     try {
       setIsLoading(true);
       
-      // Fetch members with their interests and payments
+      // Fetch members with their interests, payments, and household_id
       const { data: membersData, error: membersError } = await supabase
         .from('members')
         .select(`
@@ -259,6 +261,14 @@ const AdminMembers: React.FC = () => {
 
       if (membersError) throw membersError;
 
+      // Count members per household
+      const counts: {[householdId: string]: number} = {};
+      membersData.forEach((m: any) => {
+        if (m.household_id) {
+          counts[m.household_id] = (counts[m.household_id] || 0) + 1;
+        }
+      });
+
       // Transform the data to match our Member interface
       const membersWithInterests = membersData.map(member => {
         // Calculate status for each member
@@ -276,7 +286,10 @@ const AdminMembers: React.FC = () => {
         };
       });
 
+      console.log('Fetched membersData:', membersData);
       setMembers(membersWithInterests);
+      setHouseholdCounts(counts);
+      console.log('Household counts:', counts);
     } catch (error) {
       console.error('Error fetching members:', error);
       setAlert({
@@ -768,6 +781,8 @@ const AdminMembers: React.FC = () => {
     const displayInterests = interests.length > 0 ? interests.slice(0, 3) : [];
     const hasMoreInterests = interests.length > 3;
 
+    console.log('Rendering card for member:', member.id, 'household_id:', member.household_id, 'count:', householdCounts[member.household_id]);
+
     return (
       <Card 
         key={member.id} 
@@ -775,6 +790,13 @@ const AdminMembers: React.FC = () => {
         onClick={() => handleCardClick(member)}
       >
         <div className="absolute top-2 right-2 flex space-x-2" onClick={(e) => e.stopPropagation()}>
+          {/* Household indicator */}
+          {member.household_id && householdCounts[member.household_id] > 1 && (
+            <div className="flex items-center space-x-1 text-blue-700" title="Household">
+              <Home className="h-5 w-5" />
+              <span className="font-semibold text-xs">{householdCounts[member.household_id]}</span>
+            </div>
+          )}
           <Button
             onClick={() => handleEditMember(member)}
             variant="outline"

@@ -93,7 +93,7 @@ const ImportManager: React.FC = () => {
   const [step, setStep] = useState<'mapping' | 'preview' | 'resolve-file-dupes' | 'resolve-db-dupes' | 'import-ready'>('mapping');
   const [processedRows, setProcessedRows] = useState<any[]>([]);
   const [duplicateRows, setDuplicateRows] = useState<Set<number>>(new Set());
-  const [fileDuplicateGroups, setFileDuplicateGroups] = useState<{email: string, rowIndexes: number[]}[]>([]);
+  const [fileDuplicateGroups, setFileDuplicateGroups] = useState<{email: string, members: any[]}[]>([]);
   const [fileDupeResolutions, setFileDupeResolutions] = useState<{[email: string]: number | null}>({});
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
   const [dbDuplicateGroups, setDbDuplicateGroups] = useState<{email: string, imported: any, existing: any}[]>([]);
@@ -105,6 +105,7 @@ const ImportManager: React.FC = () => {
   const topRef = useRef<HTMLDivElement>(null);
   const [convertingHousehold, setConvertingHousehold] = useState<string | null>(null);
   const [householdConvertLoading, setHouseholdConvertLoading] = useState(false);
+  const [selectedPrimaryContact, setSelectedPrimaryContact] = useState<{[email: string]: number}>({});
 
   // Load saved mappings and membership types
   useEffect(() => {
@@ -264,21 +265,46 @@ const ImportManager: React.FC = () => {
     if (!mappingName || !importPreview) return;
 
     try {
+      // First try to save without default_values
       const { data, error } = await supabase
         .from('import_mappings')
         .insert([{
           name: mappingName,
           type: 'member',
           source_fields: importPreview.mapping.sourceFields,
-          transformations: importPreview.mapping.transformations,
-          default_values: importPreview.mapping.defaultValues
+          transformations: importPreview.mapping.transformations
         }])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // If error is about missing column, try to add it
+        if (error.message.includes('default_values')) {
+          const { error: alterError } = await supabase.rpc('add_default_values_column');
+          if (alterError) throw alterError;
 
-      setSavedMappings((prev: FieldMapping[]) => [...prev, data]);
+          // Try the insert again with default_values
+          const { data: retryData, error: retryError } = await supabase
+            .from('import_mappings')
+            .insert([{
+              name: mappingName,
+              type: 'member',
+              source_fields: importPreview.mapping.sourceFields,
+              transformations: importPreview.mapping.transformations,
+              default_values: importPreview.mapping.defaultValues
+            }])
+            .select()
+            .single();
+
+          if (retryError) throw retryError;
+          setSavedMappings((prev: FieldMapping[]) => [...prev, retryData]);
+        } else {
+          throw error;
+        }
+      } else {
+        setSavedMappings((prev: FieldMapping[]) => [...prev, data]);
+      }
+
       setAlert({
         type: 'success',
         message: 'Mapping saved successfully'
@@ -333,8 +359,8 @@ const ImportManager: React.FC = () => {
     }));
     if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth' });
     const { allRows, headers, mapping } = importPreview;
-    const processed: any[] = [];
-    const seenEmails = new Map<string, number[]>();
+    const processed: { rowIdx: number, data: any }[] = [];
+    const seenEmails = new Map<string, number[]>(); // normalized email -> array of processed indexes
     const duplicates = new Set<number>();
     
     // Log the current mapping state
@@ -365,7 +391,7 @@ const ImportManager: React.FC = () => {
     }
 
     allRows.forEach((row: any[], rowIdx: number) => {
-      const mapped: any = { ...defaultValues }; // Start with all default values
+      const mapped: any = { ...defaultValues };
       let hasRequiredFields = true;
 
       MEMBER_FIELDS.forEach(field => {
@@ -373,15 +399,11 @@ const ImportManager: React.FC = () => {
         if (source && headers.includes(source)) {
           const idx = headers.indexOf(source);
           const value = row[idx];
-          
-          // For required fields, ensure we have a value
           if (field.required && (value === undefined || value === null || value === '')) {
             hasRequiredFields = false;
             console.log(`Missing required value for ${field.label} in row ${rowIdx + 1}`);
           }
-
           if (value !== undefined && value !== null && value !== '') {
-            // Only override default if we have a non-empty value
             if (field.id === 'phone') {
               mapped[field.id] = value ? String(value).replace(/\D/g, '') : '';
             } else if (mapping.transformations[field.id]) {
@@ -393,16 +415,16 @@ const ImportManager: React.FC = () => {
         }
       });
 
-      // Only process rows that have all required fields
       if (hasRequiredFields) {
-        // Duplicate detection (by email)
-        if (mapped.email) {
-          if (!seenEmails.has(mapped.email)) {
-            seenEmails.set(mapped.email, []);
+        const normalizedEmail = mapped.email ? mapped.email.trim().toLowerCase() : '';
+        const processedIdx = processed.length;
+        processed.push({ rowIdx, data: mapped });
+        if (normalizedEmail) {
+          if (!seenEmails.has(normalizedEmail)) {
+            seenEmails.set(normalizedEmail, []);
           }
-          seenEmails.get(mapped.email)!.push(rowIdx);
+          seenEmails.get(normalizedEmail)!.push(processedIdx);
         }
-        processed.push(mapped);
       } else {
         console.log(`Skipping row ${rowIdx + 1} due to missing required fields`);
       }
@@ -412,25 +434,25 @@ const ImportManager: React.FC = () => {
       }
     });
 
-    // Log processing results
-    console.log('Processing results:', {
-      totalRows: allRows.length,
-      processedRows: processed.length,
-      skippedRows: allRows.length - processed.length
-    });
-
-    // Find file duplicate groups
-    const fileDupes: {email: string, rowIndexes: number[]}[] = [];
+    // Build file duplicate groups using processed indexes
+    const fileDupes: { email: string, members: any[] }[] = [];
     seenEmails.forEach((indexes: number[], email: string) => {
-      if (indexes.length > 1) fileDupes.push({ email, rowIndexes: indexes });
-      indexes.forEach((idx: number) => { if (indexes.length > 1) duplicates.add(idx); });
+      if (indexes.length > 1) {
+        fileDupes.push({
+          email,
+          members: indexes.map(idx => processed[idx]?.data).filter(Boolean)
+        });
+        indexes.forEach(idx => { if (indexes.length > 1) duplicates.add(idx); });
+      }
     });
-    setProcessedRows(processed);
+    setProcessedRows(processed.map(p => p.data));
     setDuplicateRows(duplicates);
     setFileDuplicateGroups(fileDupes);
     setFileDupeResolutions({});
-    setTimeout(() => setProgress(null), 500); // Hide progress after short delay
-    setStep(fileDupes.length > 0 ? 'resolve-file-dupes' : 'preview');
+    setTimeout(() => setProgress(null), 500);
+    const nextStep = fileDupes.length > 0 ? 'resolve-file-dupes' : 'preview';
+    console.log('Setting step:', nextStep, 'fileDupes:', fileDupes);
+    setStep(nextStep);
   };
 
   // Handler for resolving file duplicate group
@@ -448,7 +470,7 @@ const ImportManager: React.FC = () => {
     if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth' });
     // Only keep the selected row for each dupe group, skip others
     const toKeep = new Set<number>();
-    fileDuplicateGroups.forEach((group: { email: string; rowIndexes: number[] }, i: number) => {
+    fileDuplicateGroups.forEach((group: { email: string; members: any[] }, i: number) => {
       const selected = fileDupeResolutions[group.email];
       if (selected !== undefined && selected !== null) {
         toKeep.add(selected);
@@ -659,36 +681,77 @@ const ImportManager: React.FC = () => {
       // Find all records with this email
       const group = fileDuplicateGroups.find(g => g.email === email);
       if (!group) throw new Error('Duplicate group not found');
-      const members = group.rowIndexes.map(idx => processedRows[idx]);
+      const members = group.members;
 
-      // Create household
-      const { data: household, error: householdError } = await supabase
+      // Check if a household with the same email already exists
+      const { data: existingHousehold, error: existingHouseholdError } = await supabase
         .from('households')
-        .insert({ email })
-        .select()
-        .single();
-      if (householdError || !household) throw new Error('Failed to create household');
-
-      // For now, default first member as login/primary
-      for (let i = 0; i < members.length; i++) {
-        await supabase.from('members').insert({
-          ...members[i],
-          household_id: household.id,
-          has_login: i === 0,
-          is_primary_contact: i === 0,
-        });
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+      if (existingHouseholdError) throw new Error('Failed to check for existing household');
+      let household = existingHousehold;
+      if (!household) {
+        const { data: newHousehold, error: householdError } = await supabase
+          .from('households')
+          .insert({ email })
+          .select()
+          .single();
+        if (householdError || !newHousehold) throw new Error('Failed to create household');
+        household = newHousehold;
       }
+
+      // Update all existing members with this email to be part of the household
+      const { error: updateError } = await supabase
+        .from('members')
+        .update({
+          household_id: household.id,
+          has_login: false,
+          is_primary_contact: false
+        })
+        .eq('email', email);
+
+      if (updateError) throw new Error('Failed to update existing members');
+
+      // Set the selected member as login/primary
+      const primaryIndex = selectedPrimaryContact[email];
+      if (primaryIndex === undefined) throw new Error('No primary contact selected');
+      
+      const primaryMember = members[primaryIndex];
+      const { error: primaryError } = await supabase
+        .from('members')
+        .update({
+          has_login: true,
+          is_primary_contact: true
+        })
+        .eq('email', email)
+        .eq('first_name', primaryMember.first_name)
+        .eq('last_name', primaryMember.last_name);
+
+      if (primaryError) throw new Error('Failed to set primary contact');
 
       // Remove these rows from processedRows and update state
       const toRemove = new Set(group.rowIndexes);
       setProcessedRows(prev => prev.filter((_, idx) => !toRemove.has(idx)));
-      setFileDuplicateGroups(prev => prev.filter(g => g.email !== email));
+      setFileDuplicateGroups(prev => {
+        const updated = prev.filter(g => g.email !== email);
+        // If all groups are resolved, advance to preview step
+        if (updated.length === 0) {
+          setStep('preview');
+        }
+        return updated;
+      });
       setFileDupeResolutions(prev => {
         const copy = { ...prev };
         delete copy[email];
         return copy;
       });
-      setAlert({ type: 'success', message: `Created household and imported ${members.length} members.` });
+      setSelectedPrimaryContact(prev => {
+        const copy = { ...prev };
+        delete copy[email];
+        return copy;
+      });
+      setAlert({ type: 'success', message: `Created household and updated ${members.length} members.` });
     } catch (error: any) {
       setAlert({ type: 'error', message: error.message || 'Failed to convert to household.' });
     } finally {
@@ -696,6 +759,8 @@ const ImportManager: React.FC = () => {
       setHouseholdConvertLoading(false);
     }
   };
+
+  console.log('RENDER: step =', step, 'fileDuplicateGroups.length =', fileDuplicateGroups.length);
 
   return (
     <div ref={topRef} className="max-w-7xl mx-auto space-y-6">
@@ -1057,63 +1122,76 @@ const ImportManager: React.FC = () => {
       {step === 'resolve-file-dupes' && fileDuplicateGroups.length > 0 && (
         <Card>
           <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Resolve Duplicates in Uploaded File</h3>
-            <div className="space-y-8">
-              {buildFileDuplicateGroups(processedRows).map((group: { email: string; rowIndexes: number[] }, i: number) => (
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Resolve Duplicate Emails</h3>
+            <div className="space-y-6">
+              {fileDuplicateGroups.map(group => (
                 <div key={group.email} className="border rounded-lg p-4">
-                  <div className="mb-4 font-semibold text-gray-700">Email: {group.email}</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {group.rowIndexes.map((idx: number) => (
-                      <div key={idx} className="border rounded-lg p-4 bg-white">
-                        <div className="flex justify-between items-start mb-4">
-                          <h4 className="font-medium text-gray-900">Record {idx + 1}</h4>
-                          <Button
-                            variant={fileDupeResolutions[group.email] === idx ? 'primary' : 'outline'}
-                            onClick={() => handleResolveFileDupe(group.email, idx)}
-                          >
-                            {fileDupeResolutions[group.email] === idx ? 'Selected' : 'Keep This Record'}
-                          </Button>
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-medium text-gray-900">{group.email}</h4>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => handleResolveFileDupe(group.email, null)}
+                        disabled={householdConvertLoading}
+                      >
+                        Skip All
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={() => handleConvertToHousehold(group.email)}
+                        disabled={householdConvertLoading || selectedPrimaryContact[group.email] === undefined}
+                      >
+                        {householdConvertLoading && convertingHousehold === group.email ? (
+                          'Converting...'
+                        ) : (
+                          'Convert to Household'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {group.members.map((member, index) => (
+                      <div key={`${member.email || 'unknown'}-${index}`} className="flex items-start space-x-4 p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center h-6">
+                          <input
+                            type="radio"
+                            name={`primary-${group.email}`}
+                            checked={selectedPrimaryContact[group.email] === index}
+                            onChange={() => setSelectedPrimaryContact(prev => ({
+                              ...prev,
+                              [group.email]: index
+                            }))}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                          />
                         </div>
-                        <div className="space-y-2">
-                          {MEMBER_FIELDS.map((field: { id: string; label: string; required: boolean }) => (
-                            processedRows[idx][field.id] && (
-                              <div key={field.id}>
-                                <span className="text-sm font-medium text-gray-500">{field.label}:</span>
-                                <p className="text-sm text-gray-900">{processedRows[idx][field.id]}</p>
-                              </div>
-                            )
-                          ))}
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium">{member.first_name} {member.last_name}</span>
+                              {selectedPrimaryContact[group.email] === index && (
+                                <span className="ml-2 text-sm text-primary-600">(Primary Contact)</span>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleResolveFileDupe(group.email, index)}
+                              disabled={householdConvertLoading}
+                            >
+                              Keep Only This
+                            </Button>
+                          </div>
+                          <div className="mt-1 text-sm text-gray-500">
+                            {member.email && <div>Email: {member.email}</div>}
+                            {member.phone && <div>Phone: {member.phone}</div>}
+                            {member.address && <div>Address: {member.address}</div>}
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 flex justify-end space-x-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleResolveFileDupe(group.email, null)}
-                    >
-                      Skip All Records
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      loading={convertingHousehold === group.email && householdConvertLoading}
-                      onClick={() => handleConvertToHousehold(group.email)}
-                      disabled={householdConvertLoading}
-                    >
-                      Convert to Household
-                    </Button>
-                  </div>
                 </div>
               ))}
-            </div>
-            <div className="mt-6 flex justify-end">
-              <Button
-                variant="primary"
-                disabled={fileDuplicateGroups.some((group: { email: string; rowIndexes: number[] }) => fileDupeResolutions[group.email] === undefined)}
-                onClick={finalizeFileDupeResolutions}
-              >
-                Continue
-              </Button>
             </div>
           </div>
         </Card>
