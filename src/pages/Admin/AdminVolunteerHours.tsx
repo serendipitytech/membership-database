@@ -1,16 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout/Layout';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
-<<<<<<< HEAD
-import { Search, Download, Edit2, Trash2, X } from 'lucide-react';
-=======
 import MemberSearchSelect from '../../components/Form/MemberSearchSelect';
 import { Search, Download, Edit2, Trash2 } from 'lucide-react';
->>>>>>> bugfixes/improvements
 import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
@@ -55,79 +51,16 @@ const AdminVolunteerHours: React.FC = () => {
   const [hours, setHours] = useState('');
   const [description, setDescription] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<string>('');
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [selectedMember, setSelectedMember] = useState<string>('');
   const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [cumulativeHours, setCumulativeHours] = useState<CumulativeHours[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchMembers();
     fetchEvents();
     fetchVolunteerHours();
   }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
-          searchInputRef.current && !searchInputRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-        setHighlightedIndex(-1);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const filteredMembers = members.filter(member => 
-    (member.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     member.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     member.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (highlightedIndex >= 0 && filteredMembers[highlightedIndex]) {
-        handleMemberSelect(filteredMembers[highlightedIndex]);
-      } else if (filteredMembers.length > 0) {
-        handleMemberSelect(filteredMembers[0]);
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIndex(prev => 
-        prev < filteredMembers.length - 1 ? prev + 1 : prev
-      );
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex(prev => prev > 0 ? prev - 1 : prev);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setShowDropdown(false);
-      setHighlightedIndex(-1);
-      setSearchTerm('');
-      if (searchInputRef.current) {
-        searchInputRef.current.blur();
-      }
-    }
-  };
-
-  const handleMemberSelect = (member: Member) => {
-    setSelectedMember(member);
-    setSearchTerm('');
-    setShowDropdown(false);
-    setHighlightedIndex(-1);
-    if (searchInputRef.current) {
-      searchInputRef.current.blur();
-    }
-  };
 
   const fetchMembers = async () => {
     try {
@@ -262,7 +195,7 @@ const AdminVolunteerHours: React.FC = () => {
       const { error } = await supabase
         .from('volunteer_hours')
         .insert({
-          member_id: selectedMember.id,
+          member_id: selectedMember,
           event_id: selectedEvent,
           hours: parseFloat(hours),
           description,
@@ -280,7 +213,7 @@ const AdminVolunteerHours: React.FC = () => {
       });
 
       // Reset form
-      setSelectedMember(null);
+      setSelectedMember('');
       setSelectedEvent('');
       setHours('');
       setDescription('');
@@ -321,7 +254,7 @@ const AdminVolunteerHours: React.FC = () => {
 
   const handleEdit = (hours: VolunteerHours) => {
     setSelectedHours(hours);
-    setSelectedMember(hours.members);
+    setSelectedMember(hours.member_id);
     setSelectedEvent(hours.event_id);
     setHours(hours.hours.toString());
     setDescription(hours.description);
@@ -386,7 +319,7 @@ const AdminVolunteerHours: React.FC = () => {
       const { error } = await supabase
         .from('volunteer_hours')
         .update({
-          member_id: selectedMember.id,
+          member_id: selectedMember,
           event_id: selectedEvent,
           hours: parseFloat(hours),
           description,
@@ -406,7 +339,7 @@ const AdminVolunteerHours: React.FC = () => {
 
       // Reset form and editing state
       setSelectedHours(null);
-      setSelectedMember(null);
+      setSelectedMember('');
       setSelectedEvent('');
       setHours('');
       setDescription('');
@@ -518,59 +451,6 @@ const AdminVolunteerHours: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Record Volunteer Hours</h2>
             <form onSubmit={handleSubmit} className="grid grid-cols-12 gap-4">
               <div className="col-span-3">
-<<<<<<< HEAD
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Member <span className="text-accent-600">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      ref={searchInputRef}
-                      value={searchTerm}
-                      onChange={(e) => {
-                        setSearchTerm(e.target.value);
-                        setShowDropdown(true);
-                      }}
-                      onKeyDown={handleSearchKeyDown}
-                      onFocus={() => setShowDropdown(true)}
-                      placeholder="Search members..."
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                    {showDropdown && filteredMembers.length > 0 && (
-                      <div
-                        ref={dropdownRef}
-                        className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
-                      >
-                        {filteredMembers.map((member, index) => (
-                          <div
-                            key={member.id}
-                            className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
-                              index === highlightedIndex ? 'bg-gray-100' : ''
-                            }`}
-                            onClick={() => handleMemberSelect(member)}
-                          >
-                            <div className="font-medium">{member.first_name} {member.last_name}</div>
-                            <div className="text-sm text-gray-500">{member.email}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {selectedMember && (
-                    <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100">
-                      <span>{selectedMember.first_name} {selectedMember.last_name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedMember(null)}
-                        className="ml-2 text-gray-500 hover:text-gray-700"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-=======
                 <label className="block text-sm font-medium text-gray-700 mb-1">Member</label>
                 <MemberSearchSelect
                   members={members}
@@ -579,7 +459,6 @@ const AdminVolunteerHours: React.FC = () => {
                   placeholder="Search members..."
                   required
                 />
->>>>>>> bugfixes/improvements
               </div>
               <div className="col-span-3">
                 <SelectField
@@ -642,23 +521,12 @@ const AdminVolunteerHours: React.FC = () => {
                   <h2 className="text-xl font-semibold mb-4">Edit Volunteer Hours</h2>
                   <form onSubmit={handleUpdate} className="grid grid-cols-12 gap-4">
                     <div className="col-span-3">
-<<<<<<< HEAD
-                      <SelectField
-                        label="Member"
-                        value={selectedMember?.id}
-                        onChange={(e) => setSelectedMember(members.find(m => m.id === e.target.value) || null)}
-                        options={members.map(member => ({
-                          value: member.id,
-                          label: `${member.first_name} ${member.last_name}`
-                        }))}
-=======
                       <label className="block text-sm font-medium text-gray-700 mb-1">Member</label>
                       <MemberSearchSelect
                         members={members}
                         value={members.find(m => m.id === selectedMember) || null}
                         onChange={member => setSelectedMember(member ? member.id : '')}
                         placeholder="Search members..."
->>>>>>> bugfixes/improvements
                         required
                       />
                     </div>
@@ -697,7 +565,7 @@ const AdminVolunteerHours: React.FC = () => {
                         variant="outline"
                         onClick={() => {
                           setSelectedHours(null);
-                          setSelectedMember(null);
+                          setSelectedMember('');
                           setSelectedEvent('');
                           setHours('');
                           setDescription('');

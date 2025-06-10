@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../../components/Layout/Layout';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
@@ -100,13 +100,13 @@ const AdminPayments: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [amount, setAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [paymentMethod, setPaymentMethod] = useState('');
+  const [amount, setAmount] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentMethods, setPaymentMethods] = useState<Array<{value: string, label: string}>>([]);
-  const [notes, setNotes] = useState('');
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [alert, setAlert] = useState<{type: 'success' | 'error' | 'info' | 'warning', message: string} | null>(null);
+  const [notes, setNotes] = useState<string>('');
+  const [paymentDate, setPaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [isRecurring, setIsRecurring] = useState<boolean>(false);
+  const [alert, setAlert] = useState<AlertState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
@@ -130,93 +130,6 @@ const AdminPayments: React.FC = () => {
     fetchPayments();
     loadPaymentMethods();
   }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
-          searchInputRef.current && !searchInputRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-        setHighlightedIndex(-1);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (highlightedIndex >= 0 && filteredMembers[highlightedIndex]) {
-        handleMemberSelect(filteredMembers[highlightedIndex]);
-      } else if (filteredMembers.length > 0) {
-        handleMemberSelect(filteredMembers[0]);
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIndex((prev: number) => 
-        prev < filteredMembers.length - 1 ? prev + 1 : prev
-      );
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex((prev: number) => prev > 0 ? prev - 1 : prev);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setShowDropdown(false);
-      setHighlightedIndex(-1);
-      setSearchTerm('');
-      if (searchInputRef.current) {
-        searchInputRef.current.blur();
-      }
-    }
-  };
-
-  const handleMemberSearch = (searchValue: string) => {
-    setSearchTerm(searchValue);
-    if (searchValue.length >= 2) {
-      const filtered = members.filter(member => 
-        `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchValue.toLowerCase()) ||
-        member.email.toLowerCase().includes(searchValue.toLowerCase())
-      );
-      setFilteredMembers(filtered);
-      setShowDropdown(true);
-    } else {
-      setFilteredMembers([]);
-      setShowDropdown(false);
-    }
-  };
-
-  const handleMemberSelect = (member: Member) => {
-    setSelectedMember(member);
-    setFormData(prev => ({
-      ...prev,
-      member_id: member.id
-    }));
-    setSearchTerm(`${member.first_name} ${member.last_name}`);
-    setShowDropdown(false);
-    setHighlightedIndex(-1);
-    if (searchInputRef.current) {
-      searchInputRef.current.blur();
-    }
-  };
-
-  // After successful submit, clear the form and re-focus member field
-  useEffect(() => {
-    if (alert && alert.type === 'success') {
-      setSelectedMember(null);
-      setSearchTerm('');
-      setAmount('');
-      setPaymentMethod('');
-      setNotes('');
-      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
-      const input = document.querySelector('input[placeholder="Type to search members..."]') as HTMLInputElement;
-      if (input) {
-        setTimeout(() => input.focus(), 0);
-      }
-    }
-  }, [alert]);
 
   const fetchMembers = async () => {
     try {
@@ -650,16 +563,16 @@ const AdminPayments: React.FC = () => {
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4 lg:mb-0">Payments</h1>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
           <Button
             onClick={exportToCSV}
             variant="outline"
-            className="w-full lg:w-auto"
+            className="flex items-center"
           >
-            <Download className="h-5 w-5 mr-2" />
-            Export CSV
+            <Download className="h-4 w-4 mr-2" />
+            Export to CSV
           </Button>
         </div>
 
@@ -672,7 +585,6 @@ const AdminPayments: React.FC = () => {
           />
         )}
 
-        {/* Record Payment Form */}
         <Card className="mb-6">
           <div className="p-6 bg-white rounded-md shadow-md">
             <h2 className="text-xl font-semibold mb-4">{editingPayment ? 'Edit Payment' : 'Record Payment'}</h2>
@@ -824,13 +736,43 @@ const AdminPayments: React.FC = () => {
 
         <Card>
           <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment Records</h2>
             <DataTable
-              columns={columns}
-              data={payments}
-              searchable={true}
-              searchPlaceholder="Search payments..."
-              className="bg-white shadow rounded-lg"
+              data={memberSummaries}
+              columns={[
+                {
+                  header: 'Member',
+                  accessor: 'member',
+                  render: (value: Member) => `${value.first_name} ${value.last_name}`
+                },
+                {
+                  header: 'Total Contributions',
+                  accessor: 'total_amount',
+                  render: (value: number) => formatCurrency(value)
+                },
+                {
+                  header: 'Payment Count',
+                  accessor: 'payment_count'
+                },
+                {
+                  header: 'Last Payment',
+                  accessor: 'last_payment_date',
+                  render: (value: string) => formatDate(value)
+                },
+                {
+                  header: 'Actions',
+                  accessor: 'member_id',
+                  render: (value: string, row: MemberPaymentSummary) => (
+                    <Button
+                      onClick={() => handleViewTransactions(value, row.member)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      View Transactions
+                    </Button>
+                  )
+                }
+              ]}
+              isLoading={isLoading}
             />
           </div>
         </Card>
