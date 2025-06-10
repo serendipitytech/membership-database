@@ -427,7 +427,14 @@ const AdminAttendance: React.FC = () => {
                     {showDropdown && filteredMembers.length > 0 && (
                       <div
                         ref={dropdownRef}
-                        className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+                        style={{
+                          position: 'fixed',
+                          zIndex: 50,
+                          left: searchInputRef.current ? searchInputRef.current.getBoundingClientRect().left : undefined,
+                          top: searchInputRef.current ? searchInputRef.current.getBoundingClientRect().bottom + window.scrollY : undefined,
+                          width: searchInputRef.current ? searchInputRef.current.offsetWidth : undefined
+                        }}
+                        className="mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
                       >
                         {filteredMembers.map((member, index) => (
                           <div

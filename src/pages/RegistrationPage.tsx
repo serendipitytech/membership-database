@@ -194,7 +194,7 @@ const RegistrationPage: React.FC = () => {
     
     // For phone numbers, store only digits
     if (name === 'phone' || name === 'emergency_contact_phone') {
-      const digits = value.replace(/\D/g, ''); // Remove all non-digits
+      const digits = value.replace(/\D/g, '');
       setFormData(prev => ({ ...prev, [name]: digits }));
       return;
     }
@@ -360,10 +360,11 @@ const RegistrationPage: React.FC = () => {
             id="phone"
             label="Phone Number"
             type="tel"
-            value={formData.phone}
+            value={formatPhoneNumber(formData.phone)}
             onChange={handleChange}
             required
             error={fieldErrors['phone']}
+            placeholder="(555) 555-5555"
           />
           <div className="flex items-center">
             <input
@@ -548,10 +549,11 @@ const RegistrationPage: React.FC = () => {
             id="emergency_contact_phone"
             label="Emergency Contact Phone"
             type="tel"
-            value={formData.emergency_contact_phone}
+            value={formatPhoneNumber(formData.emergency_contact_phone)}
             onChange={handleChange}
             required
             error={fieldErrors['emergency_contact_phone']}
+            placeholder="(555) 555-5555"
           />
           <TextField
             id="emergency_contact_relationship"

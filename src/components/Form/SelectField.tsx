@@ -33,7 +33,7 @@ const SelectField: React.FC<SelectFieldProps> = ({
         className="block text-sm font-medium text-gray-700 mb-1"
       >
         {label}
-        {required && <span className="text-accent-600 ml-1">*</span>}
+        {required && label && <span className="text-accent-600 ml-1">*</span>}
       </label>
       <select
         id={id}

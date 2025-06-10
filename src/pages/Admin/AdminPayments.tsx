@@ -12,6 +12,7 @@ import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import DataTable from '../../components/UI/DataTable';
+import MemberSearchSelect from '../../components/Form/MemberSearchSelect';
 
 const timeZone = 'America/New_York';
 
@@ -123,9 +124,6 @@ const AdminPayments: React.FC = () => {
     is_recurring: false,
     notes: ''
   });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
-  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
 
   useEffect(() => {
     fetchMembers();
@@ -270,7 +268,7 @@ const AdminPayments: React.FC = () => {
     }
   };
 
-  const handleEdit = (payment: Payment) => {
+  const handleEdit = (payment: any) => {
     setEditingPayment(payment);
     setSelectedMember(payment.member);
     setAmount(payment.amount.toString());
@@ -546,45 +544,6 @@ const AdminPayments: React.FC = () => {
     setEndDate(tempEndDate);
   };
 
-  // Add new function for member search
-  const handleMemberSearch = (searchValue: string) => {
-    setSearchTerm(searchValue);
-    if (searchValue.length >= 2) {
-      const filtered = members.filter(member => 
-        `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchValue.toLowerCase()) ||
-        member.email.toLowerCase().includes(searchValue.toLowerCase())
-      );
-      setFilteredMembers(filtered);
-      setShowMemberDropdown(true);
-    } else {
-      setFilteredMembers([]);
-      setShowMemberDropdown(false);
-    }
-  };
-
-  const handleMemberSelect = (member: Member) => {
-    setSelectedMember(member);
-    setFormData(prev => ({
-      ...prev,
-      member_id: member.id
-    }));
-    setSearchTerm(`${member.first_name} ${member.last_name}`);
-    setShowMemberDropdown(false);
-  };
-
-  // After successful submit, clear the form and re-focus member field
-  useEffect(() => {
-    if (alert && alert.type === 'success') {
-      setSelectedMember(null);
-      setSearchTerm('');
-      setAmount('');
-      setPaymentMethod('');
-      setNotes('');
-      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
-      setTimeout(() => document.querySelector('input[placeholder="Type to search members..."]')?.focus(), 0);
-    }
-  }, [alert]);
-
   if (isLoading) {
     return (
       <Layout>
@@ -627,87 +586,75 @@ const AdminPayments: React.FC = () => {
         )}
 
         <Card className="mb-6">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              {editingPayment ? 'Edit Payment' : 'Record Payment'}
-            </h2>
-            <form onSubmit={editingPayment ? handleUpdate : handleSubmit} className="grid grid-cols-12 gap-4">
-              <div className="col-span-3 relative">
-                <TextField
-                  label="Member"
-                  value={searchTerm}
-                  onChange={(e) => handleMemberSearch(e.target.value)}
-                  placeholder="Type to search members..."
-                  className="w-full"
-                  autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter' && filteredMembers.length > 0) { handleMemberSelect(filteredMembers[0]); e.preventDefault(); } }}
-                />
-                {showMemberDropdown && filteredMembers.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredMembers.map((member) => (
-                      <div
-                        key={member.id}
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => {
-                          handleMemberSelect(member);
-                          setTimeout(() => document.getElementById('amount-field')?.focus(), 0);
-                        }}
-                      >
-                        <div className="font-medium">{member.first_name} {member.last_name}</div>
-                        <div className="text-sm text-gray-500">{member.email}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+          <div className="p-6 bg-white rounded-md shadow-md">
+            <h2 className="text-xl font-semibold mb-4">{editingPayment ? 'Edit Payment' : 'Record Payment'}</h2>
+            <form onSubmit={editingPayment ? handleUpdate : handleSubmit} className="grid grid-cols-5 gap-4">
+              {/* Row 1 */}
               <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Member</label>
+                <MemberSearchSelect
+                  members={members}
+                  value={selectedMember}
+                  onChange={member => {
+                    setSelectedMember(member);
+                    setFormData((prev: any) => ({ ...prev, member_id: member.id }));
+                  }}
+                  placeholder="Search members..."
+                  inputClassName="h-12"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
                 <TextField
                   id="amount-field"
-                  label="Amount"
+                  label=""
                   type="number"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
-                  className="w-full"
+                  className="h-12"
                   required
                 />
               </div>
-              <div className="col-span-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
                 <TextField
                   id="date-field"
-                  label="Payment Date"
+                  label=""
                   type="date"
                   value={paymentDate}
                   onChange={e => setPaymentDate(e.target.value)}
-                  className="w-full"
+                  className="h-12"
                   required
                 />
               </div>
-              <div className="col-span-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
                 <SelectField
                   id="method-field"
-                  label="Payment Method"
+                  label=""
                   value={paymentMethod}
                   onChange={e => setPaymentMethod(e.target.value)}
                   options={paymentMethods}
-                  className="w-full"
+                  className="h-12"
                   required
                 />
               </div>
-              <div className="col-span-2">
-                <TextField
-                  id="notes-field"
-                  label="Notes"
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-              <div className="col-span-1 flex items-end">
+              {/* Row 2 */}
+              <TextField
+                id="notes-field"
+                label=""
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className="col-span-3 h-12"
+                placeholder="Notes"
+              />
+              <div className="col-span-2 flex justify-end items-end">
                 <Button
                   id="submit-btn"
                   type="submit"
                   variant="primary"
-                  className="w-full"
+                  className="w-full h-12"
                   disabled={isLoading}
                 >
                   {isLoading ? 'Saving...' : (editingPayment ? 'Update' : 'Add Payment')}
@@ -720,64 +667,61 @@ const AdminPayments: React.FC = () => {
         {/* Summary Statistics */}
         <Card className="mb-6">
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="md:col-span-1">
+            <div className="grid grid-cols-1 2xl:grid-cols-4 gap-6">
+              <div className="2xl:col-span-1 min-w-0">
                 <h3 className="text-sm font-medium text-gray-500">Date Range</h3>
-                <div className="mt-2 space-y-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-500">Start Date</label>
-                      <input
-                        type="date"
-                        value={tempStartDate}
-                        onChange={(e) => handleDateChange('start', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-500">End Date</label>
-                      <input
-                        type="date"
-                        value={tempEndDate}
-                        onChange={(e) => handleDateChange('end', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                      />
-                    </div>
+                <div className="mt-2 flex items-end space-x-2">
+                  <div>
+                    <label className="block text-xs text-gray-500">Start Date</label>
+                    <input
+                      type="date"
+                      value={tempStartDate}
+                      onChange={(e) => handleDateChange('start', e.target.value)}
+                      className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
                   </div>
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={handleApplyDateFilter}
-                      variant="primary"
-                      size="sm"
-                    >
-                      Apply Filter
-                    </Button>
+                  <div>
+                    <label className="block text-xs text-gray-500">End Date</label>
+                    <input
+                      type="date"
+                      value={tempEndDate}
+                      onChange={(e) => handleDateChange('end', e.target.value)}
+                      className="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
                   </div>
+                  <Button
+                    onClick={handleApplyDateFilter}
+                    variant="primary"
+                    size="sm"
+                    className="ml-2"
+                  >
+                    Apply Filter
+                  </Button>
                 </div>
               </div>
-              <div className="md:col-span-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
+              <div className="2xl:col-span-3 min-w-0">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-0">
+                  <div className="min-w-0">
                     <h3 className="text-sm font-medium text-gray-500">Total Contributions</h3>
-                    <p className="mt-2 text-2xl font-semibold text-gray-900">
+                    <p className="text-2xl font-semibold text-gray-900">
                       {formatCurrency(summaryStats.totalContributions)}
                     </p>
                     <p className="text-sm text-gray-500">
                       in selected date range
                     </p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="text-sm font-medium text-gray-500">Recurring Donations</h3>
-                    <p className="mt-2 text-2xl font-semibold text-gray-900">
+                    <p className="text-2xl font-semibold text-gray-900">
                       {summaryStats.recurringPercentage.toFixed(1)}%
                     </p>
                     <p className="text-sm text-gray-500">
                       of members had recurring donations in {summaryStats.previousMonthName} {summaryStats.previousMonthYear}
                     </p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="text-sm font-medium text-gray-500">Total Recurring Donations</h3>
-                    <p className="mt-2 text-2xl font-semibold text-gray-900">
+                    <p className="text-2xl font-semibold text-gray-900">
                       {formatCurrency(summaryStats.previousMonthRecurring)}
                     </p>
                     <p className="text-sm text-gray-500">
