@@ -11,7 +11,16 @@ import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, 
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
-import { formatPhoneNumber } from '../../lib/formValidation';
+import {
+  formatPhoneNumber,
+  validateEmail,
+  validatePhoneNumber,
+  validateRequired,
+  validateName,
+  validateAddress,
+  validateCity,
+  validateZipCode
+} from '../../lib/formValidation';
 import { calculateMembershipStatus } from '../../utils/membershipStatus';
 
 interface Member {
@@ -105,12 +114,66 @@ const AdminMembers: React.FC = () => {
   const [householdCounts, setHouseholdCounts] = useState<{[householdId: string]: number}>({});
   const [sortField, setSortField] = useState<'last_name' | 'first_name' | 'email' | 'status'>('last_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const sortOptions = [
     { value: 'last_name', label: 'Last Name' },
     { value: 'first_name', label: 'First Name' },
     { value: 'email', label: 'Email' },
     { value: 'status', label: 'Status' },
+  ];
+
+  const usStates = [
+    { value: 'AL', label: 'Alabama' },
+    { value: 'AK', label: 'Alaska' },
+    { value: 'AZ', label: 'Arizona' },
+    { value: 'AR', label: 'Arkansas' },
+    { value: 'CA', label: 'California' },
+    { value: 'CO', label: 'Colorado' },
+    { value: 'CT', label: 'Connecticut' },
+    { value: 'DE', label: 'Delaware' },
+    { value: 'FL', label: 'Florida' },
+    { value: 'GA', label: 'Georgia' },
+    { value: 'HI', label: 'Hawaii' },
+    { value: 'ID', label: 'Idaho' },
+    { value: 'IL', label: 'Illinois' },
+    { value: 'IN', label: 'Indiana' },
+    { value: 'IA', label: 'Iowa' },
+    { value: 'KS', label: 'Kansas' },
+    { value: 'KY', label: 'Kentucky' },
+    { value: 'LA', label: 'Louisiana' },
+    { value: 'ME', label: 'Maine' },
+    { value: 'MD', label: 'Maryland' },
+    { value: 'MA', label: 'Massachusetts' },
+    { value: 'MI', label: 'Michigan' },
+    { value: 'MN', label: 'Minnesota' },
+    { value: 'MS', label: 'Mississippi' },
+    { value: 'MO', label: 'Missouri' },
+    { value: 'MT', label: 'Montana' },
+    { value: 'NE', label: 'Nebraska' },
+    { value: 'NV', label: 'Nevada' },
+    { value: 'NH', label: 'New Hampshire' },
+    { value: 'NJ', label: 'New Jersey' },
+    { value: 'NM', label: 'New Mexico' },
+    { value: 'NY', label: 'New York' },
+    { value: 'NC', label: 'North Carolina' },
+    { value: 'ND', label: 'North Dakota' },
+    { value: 'OH', label: 'Ohio' },
+    { value: 'OK', label: 'Oklahoma' },
+    { value: 'OR', label: 'Oregon' },
+    { value: 'PA', label: 'Pennsylvania' },
+    { value: 'RI', label: 'Rhode Island' },
+    { value: 'SC', label: 'South Carolina' },
+    { value: 'SD', label: 'South Dakota' },
+    { value: 'TN', label: 'Tennessee' },
+    { value: 'TX', label: 'Texas' },
+    { value: 'UT', label: 'Utah' },
+    { value: 'VT', label: 'Vermont' },
+    { value: 'VA', label: 'Virginia' },
+    { value: 'WA', label: 'Washington' },
+    { value: 'WV', label: 'West Virginia' },
+    { value: 'WI', label: 'Wisconsin' },
+    { value: 'WY', label: 'Wyoming' }
   ];
 
   const initializeInterestData = async () => {
@@ -353,16 +416,6 @@ const AdminMembers: React.FC = () => {
       }
       return newSet;
     });
-  };
-
-  const formatPhoneNumber = (phone: string) => {
-    if (!phone) return '';
-    const cleaned = phone.replace(/\D/g, '');
-    const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-    if (match) {
-      return `(${match[1]}) ${match[2]}-${match[3]}`;
-    }
-    return phone;
   };
 
   const handleCardClick = (member: Member) => {
@@ -1002,7 +1055,7 @@ const AdminMembers: React.FC = () => {
                   phone: '',
                   address: '',
                   city: '',
-                  state: '',
+                  state: 'FL',
                   zip: '',
                   membership_type: '',
                   status: 'pending',
@@ -1463,17 +1516,31 @@ const AdminMembers: React.FC = () => {
                     value={selectedMember.city || ''}
                     onChange={(e) => setSelectedMember({...selectedMember, city: e.target.value})}
                   />
-                  <TextField
+                  <SelectField
                     label="State"
-                    name="state"
-                    value={selectedMember.state || ''}
-                    onChange={(e) => setSelectedMember({...selectedMember, state: e.target.value})}
+                    id="state"
+                    value={selectedMember.state || 'FL'}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, state: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, state: '' }));
+                    }}
+                    options={usStates}
+                    required
+                    error={fieldErrors.state}
                   />
                   <TextField
                     label="ZIP"
                     name="zip"
                     value={selectedMember.zip || ''}
-                    onChange={(e) => setSelectedMember({...selectedMember, zip: e.target.value})}
+                    onChange={(e) => {
+                      // Only allow 5 digits
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 5);
+                      setSelectedMember({ ...selectedMember, zip: digits });
+                      setFieldErrors(prev => ({ ...prev, zip: '' }));
+                    }}
+                    required
+                    error={fieldErrors.zip}
+                    placeholder="12345"
                   />
                   <TextField
                     label="Precinct"
@@ -1535,6 +1602,169 @@ const AdminMembers: React.FC = () => {
                     className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isCreating && selectedMember && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Add Member</h2>
+                <button
+                  onClick={() => setIsCreating(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              <form
+                onSubmit={e => {
+                  e.preventDefault();
+                  // Validate all fields
+                  const errors: Record<string, string> = {};
+                  if (!validateName(selectedMember.first_name)) errors.first_name = 'Please enter a valid first name';
+                  if (!validateName(selectedMember.last_name)) errors.last_name = 'Please enter a valid last name';
+                  if (!validateEmail(selectedMember.email)) errors.email = 'Please enter a valid email address';
+                  if (!validatePhoneNumber(selectedMember.phone)) errors.phone = 'Please enter a valid 10-digit phone number';
+                  if (!validateAddress(selectedMember.address)) errors.address = 'Please enter a valid address';
+                  if (!validateCity(selectedMember.city)) errors.city = 'Please enter a valid city name';
+                  if (!validateRequired(selectedMember.state)) errors.state = 'State is required';
+                  if (!validateZipCode(selectedMember.zip)) errors.zip = 'Please enter a valid 5-digit ZIP code';
+                  if (!validateRequired(selectedMember.membership_type)) errors.membership_type = 'Membership type is required';
+                  setFieldErrors(errors);
+                  if (Object.keys(errors).length > 0) return;
+                  handleCreateMember(e);
+                }}
+                className="space-y-6"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <TextField
+                    label="First Name"
+                    name="first_name"
+                    value={selectedMember.first_name || ''}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, first_name: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, first_name: '' }));
+                    }}
+                    required
+                    error={fieldErrors.first_name}
+                  />
+                  <TextField
+                    label="Last Name"
+                    name="last_name"
+                    value={selectedMember.last_name || ''}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, last_name: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, last_name: '' }));
+                    }}
+                    required
+                    error={fieldErrors.last_name}
+                  />
+                  <TextField
+                    label="Email"
+                    name="email"
+                    type="email"
+                    value={selectedMember.email || ''}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, email: e.target.value.toLowerCase().trim() });
+                      setFieldErrors(prev => ({ ...prev, email: '' }));
+                    }}
+                    required
+                    error={fieldErrors.email}
+                  />
+                  <TextField
+                    label="Phone"
+                    name="phone"
+                    type="tel"
+                    value={formatPhoneNumber(selectedMember.phone || '')}
+                    onChange={e => {
+                      // Only store digits
+                      const digits = e.target.value.replace(/\D/g, '');
+                      setSelectedMember({ ...selectedMember, phone: digits });
+                      setFieldErrors(prev => ({ ...prev, phone: '' }));
+                    }}
+                    required
+                    error={fieldErrors.phone}
+                    placeholder="(555) 555-5555"
+                  />
+                  <TextField
+                    label="Address"
+                    name="address"
+                    value={selectedMember.address || ''}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, address: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, address: '' }));
+                    }}
+                    required
+                    error={fieldErrors.address}
+                  />
+                  <TextField
+                    label="City"
+                    name="city"
+                    value={selectedMember.city || ''}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, city: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, city: '' }));
+                    }}
+                    required
+                    error={fieldErrors.city}
+                  />
+                  <SelectField
+                    label="State"
+                    id="state"
+                    value={selectedMember.state || 'FL'}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, state: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, state: '' }));
+                    }}
+                    options={usStates}
+                    required
+                    error={fieldErrors.state}
+                  />
+                  <TextField
+                    label="ZIP"
+                    name="zip"
+                    value={selectedMember.zip || ''}
+                    onChange={(e) => {
+                      // Only allow 5 digits
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 5);
+                      setSelectedMember({ ...selectedMember, zip: digits });
+                      setFieldErrors(prev => ({ ...prev, zip: '' }));
+                    }}
+                    required
+                    error={fieldErrors.zip}
+                    placeholder="12345"
+                  />
+                  <SelectField
+                    label="Membership Type"
+                    id="membership_type"
+                    value={selectedMember.membership_type || ''}
+                    onChange={e => {
+                      setSelectedMember({ ...selectedMember, membership_type: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, membership_type: '' }));
+                    }}
+                    options={membershipTypes}
+                    required
+                    error={fieldErrors.membership_type}
+                  />
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreating(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    Add Member
                   </button>
                 </div>
               </form>

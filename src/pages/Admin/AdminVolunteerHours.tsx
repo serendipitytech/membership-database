@@ -5,7 +5,12 @@ import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
+<<<<<<< HEAD
 import { Search, Download, Edit2, Trash2, X } from 'lucide-react';
+=======
+import MemberSearchSelect from '../../components/Form/MemberSearchSelect';
+import { Search, Download, Edit2, Trash2 } from 'lucide-react';
+>>>>>>> bugfixes/improvements
 import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { supabase } from '../../lib/supabase';
@@ -440,17 +445,24 @@ const AdminVolunteerHours: React.FC = () => {
     {
       header: 'Actions',
       accessor: 'id',
-      render: (value: string) => (
+      render: (value: string, row: VolunteerHours) => (
         <div className="flex space-x-2">
           <button
-            onClick={() => handleEdit(volunteerHours.find(h => h.id === value) as VolunteerHours)}
+            onClick={() => handleEdit(row)}
             className="text-primary-600 hover:text-primary-900"
             title="Edit hours"
           >
             <Edit2 className="h-5 w-5" />
           </button>
           <button
-            onClick={() => handleDelete(cumulativeHours.find(h => h.member_id === value && h.event_id === value) as CumulativeHours)}
+            onClick={() => handleDelete({
+              member_id: row.member_id,
+              event_id: row.event_id,
+              total_hours: 0,
+              member: row.members!,
+              event: row.events!,
+              last_updated: row.created_at
+            })}
             className="text-red-600 hover:text-red-900"
             title="Delete hours"
           >
@@ -506,6 +518,7 @@ const AdminVolunteerHours: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Record Volunteer Hours</h2>
             <form onSubmit={handleSubmit} className="grid grid-cols-12 gap-4">
               <div className="col-span-3">
+<<<<<<< HEAD
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Member <span className="text-accent-600">*</span>
@@ -557,6 +570,16 @@ const AdminVolunteerHours: React.FC = () => {
                     </div>
                   )}
                 </div>
+=======
+                <label className="block text-sm font-medium text-gray-700 mb-1">Member</label>
+                <MemberSearchSelect
+                  members={members}
+                  value={members.find(m => m.id === selectedMember) || null}
+                  onChange={member => setSelectedMember(member ? member.id : '')}
+                  placeholder="Search members..."
+                  required
+                />
+>>>>>>> bugfixes/improvements
               </div>
               <div className="col-span-3">
                 <SelectField
@@ -619,6 +642,7 @@ const AdminVolunteerHours: React.FC = () => {
                   <h2 className="text-xl font-semibold mb-4">Edit Volunteer Hours</h2>
                   <form onSubmit={handleUpdate} className="grid grid-cols-12 gap-4">
                     <div className="col-span-3">
+<<<<<<< HEAD
                       <SelectField
                         label="Member"
                         value={selectedMember?.id}
@@ -627,6 +651,14 @@ const AdminVolunteerHours: React.FC = () => {
                           value: member.id,
                           label: `${member.first_name} ${member.last_name}`
                         }))}
+=======
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Member</label>
+                      <MemberSearchSelect
+                        members={members}
+                        value={members.find(m => m.id === selectedMember) || null}
+                        onChange={member => setSelectedMember(member ? member.id : '')}
+                        placeholder="Search members..."
+>>>>>>> bugfixes/improvements
                         required
                       />
                     </div>
