@@ -10,7 +10,7 @@ const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <h3 className="text-xl font-semibold mb-3">Northwest Democrats</h3>
+            <h3 className="text-xl font-semibold mb-3">SW Volusia Democrats</h3>
             <p className="text-gray-300 mb-4">
               Working together to create a more just, equitable, and democratic society through local engagement and action.
             </p>
@@ -33,7 +33,7 @@ const Footer: React.FC = () => {
                 <Instagram size={20} />
                 <span className="sr-only">Instagram</span>
               </a>
-              <a href="mailto:info@nwdemocrats.org" className="text-gray-300 hover:text-white transition-colors">
+              <a href="mailto:info@swvdems.org" className="text-gray-300 hover:text-white transition-colors">
                 <Mail size={20} />
                 <span className="sr-only">Email</span>
               </a>
@@ -47,17 +47,17 @@ const Footer: React.FC = () => {
           <div>
             <h3 className="text-xl font-semibold mb-3">Contact Us</h3>
             <p className="text-gray-300 mb-2">
-              <strong>Email:</strong> info@nwdemocrats.org
+              <strong>Email:</strong> info@swvdems.org
             </p>
             <p className="text-gray-300">
-              <strong>Phone:</strong> (386) 853-1580
+              <strong>Phone:</strong> (386) 320-3365
             </p>
           </div>
         </div>
         
         <div className="border-t border-gray-700 mt-8 pt-6">
           <p className="text-center text-gray-400">
-            &copy; {currentYear} Northwest Democrats. All rights reserved.
+            &copy; {currentYear} SW Volusia Democrats. All rights reserved.
           </p>
         </div>
       </div>

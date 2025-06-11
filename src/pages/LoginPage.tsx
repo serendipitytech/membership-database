@@ -7,6 +7,7 @@ import Alert from '../components/UI/Alert';
 import { Mail, Lock } from 'lucide-react';
 import { signInWithPassword, sendMagicLink } from '../lib/supabase';
 import { AuthError } from '@supabase/supabase-js';
+import { brandConfig } from '../brand';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -103,9 +104,9 @@ const LoginPage: React.FC = () => {
             <Mail className="h-8 w-8 text-primary-600" />
           </div>
           <h1 className="mt-3 text-3xl font-bold text-gray-900">Sign In</h1>
-          <p className="mt-2 text-gray-600">
-            Access your NW Democrats membership account
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Access your {brandConfig.name} membership account
+          </h1>
         </div>
         
         {alert && (

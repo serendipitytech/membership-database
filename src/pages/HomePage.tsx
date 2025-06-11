@@ -9,11 +9,11 @@ const HomePage: React.FC = () => {
   return (
     <Layout>
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-primary-700 to-primary-900 text-white py-24">
+      <section className="bg-primary-800 text-white py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-heading font-bold mb-6 leading-tight">
-              Welcome to Northwest Democrats
+              Welcome to SW Volusia Democrats
             </h1>
             <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto font-light">
               Join us in making a difference in our community. Together, we can create positive change through grassroots activism and local engagement.
@@ -40,7 +40,7 @@ const HomePage: React.FC = () => {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-heading font-bold text-gray-900 mb-4">Our Mission</h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-              The Northwest Democrats are dedicated to promoting Democratic values, supporting progressive candidates, and engaging our community in the democratic process.
+              SW Volusia Democrats is dedicated to promoting Democratic values, supporting progressive candidates, and engaging our community in the democratic process.
             </p>
           </div>
           
@@ -91,7 +91,7 @@ const HomePage: React.FC = () => {
             <div className="lg:max-w-2xl">
               <h2 className="text-3xl font-heading font-bold mb-4">Ready to make a difference?</h2>
               <p className="text-xl text-primary-100 mb-6">
-                Join the Northwest Democrats today and help us build a brighter future for our community.
+                Join SW Volusia Democrats today and help us build a brighter future for our community.
               </p>
               <Link to="/register">
                 <Button size="lg" variant="secondary" className="font-heading">
@@ -102,9 +102,10 @@ const HomePage: React.FC = () => {
             <div className="mt-8 lg:mt-0">
               <div className="bg-white/10 rounded-lg p-6 backdrop-blur-sm">
                 <h3 className="text-xl font-heading font-semibold mb-3">Next Meeting</h3>
-                <p className="mb-2"><strong>Date:</strong> 4th Thursday of the month</p>
-                <p className="mb-2"><strong>Time:</strong> Doors open at 6:30 PM, Meeting at 7:00 PM</p>
-                <p className="mb-4"><strong>Location:</strong> DeLand Garden Club</p>
+                <p className="mb-2"><strong>Date:</strong> 2nd Tuesday of the month</p>
+                <p className="mb-2"><strong>Time:</strong> Doors open at 6:00 PM, Meeting at 6:30 PM</p>
+                <p className="mb-4"><strong>Location:</strong> SW Community Center</p>
+                <p className="text-sm text-primary-100">Meetings are held monthly on the 2nd Tuesday</p>
               </div>
             </div>
           </div>

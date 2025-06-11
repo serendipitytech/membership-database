@@ -5,20 +5,19 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#174265',
           50: '#f0f7ff',
           100: '#e0f1ff',
           200: '#b9e3ff',
           300: '#7dcfff',
-          400: '#5ac1ee', // Light blue brand color
-          500: '#174265', // Dark blue brand color
+          400: '#5ac1ee',
+          500: '#174265',
           600: '#174265',
           700: '#174265',
           800: '#174265',
           900: '#174265',
+          DEFAULT: '#174265',
         },
         secondary: {
-          DEFAULT: '#5ac1ee',
           50: '#f0f9ff',
           100: '#e0f7ff',
           200: '#b9efff',
@@ -29,6 +28,7 @@ export default {
           700: '#2b89b3',
           800: '#236f95',
           900: '#1d5a7a',
+          DEFAULT: '#5ac1ee',
         },
         accent: {
           50: '#fef2f2',

@@ -12,6 +12,7 @@ import {
   Clock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { brandConfig } from '../../brand';
 
 function SidebarItem({ icon, label, to, active, collapsed }) {
   return (
@@ -54,8 +55,8 @@ const Sidebar = () => {
 
   return (
     <aside className={`fixed top-0 left-0 h-screen bg-slate-900 flex flex-col transition-all duration-200 ${collapsed ? 'w-20' : 'w-64'}`}>
-      <div className="flex items-center h-16 px-4 font-bold text-xl text-white border-b border-slate-800">
-        {!collapsed ? 'NW Democrats' : 'NW'}
+      <div className="flex items-center justify-center h-16">
+        {!collapsed ? brandConfig.name : brandConfig.name.split(' ')[0]}
       </div>
       <nav className="flex-1 overflow-y-auto min-h-0 py-4 space-y-1">
         {navItems.map((item) => (

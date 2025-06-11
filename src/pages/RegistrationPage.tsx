@@ -22,6 +22,7 @@ import {
   validateVoterId,
   validatePrecinct
 } from '../lib/formValidation';
+import { brandConfig } from '../brand';
 
 interface FormData {
   first_name: string;
@@ -663,8 +664,8 @@ const RegistrationPage: React.FC = () => {
       <div className="max-w-3xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Membership Registration</h1>
-          <p className="mt-2 text-gray-600">
-            Join the Northwest Democrats and help make a difference in our community.
+          <p className="text-lg text-gray-600 mb-8">
+            Join {brandConfig.name} and help make a difference in our community.
           </p>
         </div>
         

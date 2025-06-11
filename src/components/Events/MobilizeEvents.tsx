@@ -3,6 +3,7 @@ import Card from '../UI/Card';
 import Button from '../UI/Button';
 import { Calendar, MapPin, Clock } from 'lucide-react';
 import { format } from 'date-fns';
+import { brandConfig } from '../../brand';
 
 interface MobilizeEvent {
   id: number;
@@ -33,10 +34,11 @@ const MobilizeEvents: React.FC = () => {
     const fetchEvents = async () => {
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mobilize-events`,
+          `${brandConfig.supabaseUrl}/functions/v1/mobilize-events`,
           {
+            method: 'GET',
             headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
             },
           }
         );

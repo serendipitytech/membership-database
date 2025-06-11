@@ -1,4 +1,5 @@
 import React from 'react';
+import { config } from './config';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import RegistrationPage from './pages/RegistrationPage';
