@@ -29,7 +29,7 @@ interface MemberData {
   is_admin: boolean;
   is_cell_phone?: boolean;
   tshirt_size?: string;
-  birthdate?: string;
+  date_of_birth?: string;
   special_skills?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
@@ -37,8 +37,6 @@ interface MemberData {
   health_issues?: string;
   registration_date?: string;
   signature?: string;
-  date_of_birth?: string;
-  shirt_size?: string;
   precinct?: string;
   voter_id?: string;
   tell_us_more?: string;
@@ -457,8 +455,8 @@ const AccountPage: React.FC = () => {
                         <TextField
                           label="Birthdate"
                           type="date"
-                          value={editedData.birthdate || ''}
-                          onChange={(e) => setEditedData({ ...editedData, birthdate: e.target.value })}
+                          value={editedData.date_of_birth || ''}
+                          onChange={(e) => setEditedData({ ...editedData, date_of_birth: e.target.value })}
                         />
                         <SelectField
                           label="T-Shirt Size"
@@ -495,7 +493,7 @@ const AccountPage: React.FC = () => {
                         <div>
                           <dt className="text-sm font-medium text-gray-500">Birthdate</dt>
                           <dd className="mt-1 text-sm text-gray-900">
-                            {memberData?.birthdate ? new Date(memberData.birthdate).toLocaleDateString() : 'Not provided'}
+                            {memberData?.date_of_birth ? new Date(memberData.date_of_birth).toLocaleDateString() : 'Not provided'}
                           </dd>
                         </div>
                         <div>

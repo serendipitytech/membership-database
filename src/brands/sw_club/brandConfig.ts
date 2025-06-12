@@ -46,7 +46,7 @@ const brandConfig: BrandConfig = {
 
   socialLinks: {
     facebook: "https://www.facebook.com/swvdems",
-    twitter: "x.com/swvdems",
+    twitter: "https://x.com/swvdems",
     instagram: "https://www.instagram.com/swvolusiadems/",
     youtube: "https://www.youtube.com/@SWVDems",
     bluesky: ""

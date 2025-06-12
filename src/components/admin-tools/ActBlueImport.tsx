@@ -45,8 +45,8 @@ interface Progress {
 }
 
 // Add known URLs for classification
-const MEMBERSHIP_URLS = brandConfig.actBlueUrls.membership;
-const NON_MEMBERSHIP_URLS = brandConfig.actBlueUrls.nonMembership;
+const MEMBERSHIP_URLS = brandConfig?.actBlueUrls?.membership || [];
+const NON_MEMBERSHIP_URLS = brandConfig?.actBlueUrls?.nonMembership || [];
 
 // Add known kinds for classification
 const MEMBERSHIP_KINDS = [

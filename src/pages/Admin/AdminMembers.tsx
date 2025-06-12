@@ -1548,6 +1548,12 @@ const AdminMembers: React.FC = () => {
                     value={selectedMember.precinct || ''}
                     onChange={(e) => setSelectedMember({...selectedMember, precinct: e.target.value})}
                   />
+                  <TextField
+                    label="Voter ID"
+                    name="voter_id"
+                    value={selectedMember.voter_id || ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, voter_id: e.target.value})}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1588,6 +1594,18 @@ const AdminMembers: React.FC = () => {
                     rows={4}
                     className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="is_admin"
+                    checked={selectedMember.is_admin}
+                    onChange={(e) => setSelectedMember({...selectedMember, is_admin: e.target.checked})}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <label htmlFor="is_admin" className="text-sm font-medium text-gray-700">
+                    Grant Admin Privileges
+                  </label>
                 </div>
                 <div className="flex justify-end space-x-3">
                   <button
