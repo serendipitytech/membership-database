@@ -10,6 +10,16 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'brand-config': [
+            './src/brands/nw_club/brandConfig.ts',
+            './src/brands/sw_club/brandConfig.ts'
+          ]
+        }
+      }
+    }
   },
   resolve: {
     alias: {

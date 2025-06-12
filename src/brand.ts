@@ -34,7 +34,7 @@ export interface BrandConfig {
 // Dynamically import the brand config based on the VITE_BRAND environment variable
 const brandName = import.meta.env.VITE_BRAND || 'nw_club';
 // Ensure the brand name matches the directory structure (with underscore)
-const normalizedBrandName = brandName.replace('club', '_club');
+const normalizedBrandName = brandName.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
 // Create a promise that resolves with the brand config
 export const brandConfigPromise = import(`./brands/${normalizedBrandName}/brandConfig`)
@@ -43,6 +43,53 @@ export const brandConfigPromise = import(`./brands/${normalizedBrandName}/brandC
       throw new Error('Brand config not found');
     }
     return module.brandConfig as BrandConfig;
+  })
+  .catch(error => {
+    console.error('Failed to load brand config:', error);
+    // Provide a default config
+    return {
+      name: "Default Brand",
+      logo: "/logo.svg",
+      colors: {
+        primary: {
+          DEFAULT: '#174265',
+          50: '#f0f7ff',
+          100: '#e0f1ff',
+          200: '#b9e3ff',
+          300: '#7dcfff',
+          400: '#5ac1ee',
+          500: '#174265',
+          600: '#174265',
+          700: '#174265',
+          800: '#174265',
+          900: '#174265',
+        },
+        secondary: {
+          DEFAULT: '#5ac1ee',
+          50: '#f0f9ff',
+          100: '#e0f7ff',
+          200: '#b9efff',
+          300: '#7de7ff',
+          400: '#5ac1ee',
+          500: '#5ac1ee',
+          600: '#38a3d1',
+          700: '#2b89b3',
+          800: '#236f95',
+          900: '#1d5a7a',
+        }
+      },
+      supabaseUrl: '',
+      supabaseKey: '',
+      contactEmail: '',
+      contactPhone: '',
+      socialLinks: {
+        facebook: '',
+        twitter: '',
+        instagram: '',
+        youtube: '',
+        bluesky: ''
+      }
+    } as BrandConfig;
   });
 
 // Export the brand config (this will be undefined until the promise resolves)
@@ -51,43 +98,4 @@ export let brandConfig: BrandConfig;
 // Initialize the brand config
 brandConfigPromise.then(config => {
   brandConfig = config;
-}).catch(error => {
-  console.error('Failed to load brand config:', error);
-  // Provide a default config
-  brandConfig = {
-    name: "Default Brand",
-    logo: "/logo.svg",
-    colors: {
-      primary: {
-        DEFAULT: '#174265',
-        50: '#f0f7ff',
-        100: '#e0f1ff',
-        200: '#b9e3ff',
-        300: '#7dcfff',
-        400: '#5ac1ee',
-        500: '#174265',
-        600: '#174265',
-        700: '#174265',
-        800: '#174265',
-        900: '#174265',
-      },
-      secondary: {
-        DEFAULT: '#5ac1ee',
-        50: '#f0f9ff',
-        100: '#e0f7ff',
-        200: '#b9efff',
-        300: '#7de7ff',
-        400: '#5ac1ee',
-        500: '#5ac1ee',
-        600: '#38a3d1',
-        700: '#2b89b3',
-        800: '#236f95',
-        900: '#1d5a7a',
-      }
-    },
-    supabaseUrl: '',
-    supabaseKey: '',
-    contactEmail: '',
-    contactPhone: ''
-  };
 });
