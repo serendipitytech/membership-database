@@ -38,7 +38,15 @@ export const brandConfig = {
   
   // Meeting Information
   nextMeetingDate: "2nd Thursday of the month",
-  nextMeetingTime: "Doors open at 5:30 PM, Meeting at 6:00 PM",
+  nextMeetingTime: "Pizza at 5:30 PM, Meeting at 6:00 PM",
   nextMeetingLocation: "Enterprise Museum",
-  meetingFrequency: "monthly on the 2nd Tuesday"
+  meetingFrequency: "360 Main Street, Enterprise, FL",
+
+  socialLinks: {
+    facebook: "https://facebook.com/swdems",
+    twitter: "https://twitter.com/swdems",
+    instagram: "https://instagram.com/swdems",
+    youtube: "https://youtube.com/@swdems"
+  }
 }; 
+

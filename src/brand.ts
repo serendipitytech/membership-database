@@ -21,6 +21,14 @@ export interface BrandConfig {
   nextMeetingTime?: string;
   nextMeetingLocation?: string;
   meetingFrequency?: string;
+  // Social Media Links
+  socialLinks?: {
+    facebook?: string;
+    twitter?: string;
+    instagram?: string;
+    youtube?: string;
+    bluesky?: string;
+  };
 }
 
 // Dynamically import the brand config based on the VITE_BRAND environment variable

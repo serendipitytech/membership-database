@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { brandConfigPromise } from '../brand'; // Change to import the promise
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout/Layout';
 import Card from '../components/UI/Card';
@@ -6,6 +7,29 @@ import Button from '../components/UI/Button';
 import { Users, Calendar, Award, Clock, Vote, FileText, Heart } from 'lucide-react';
 
 const HomePage: React.FC = () => {
+  const [brandName, setBrandName] = useState<string>('Loading...');
+  const [meetingInfo, setMeetingInfo] = useState({
+    date: '',
+    time: '',
+    location: '',
+    frequency: ''
+  });
+
+  useEffect(() => {
+    brandConfigPromise.then(config => {
+      setBrandName(config.name);
+      setMeetingInfo({
+        date: config.nextMeetingDate || '',
+        time: config.nextMeetingTime || '',
+        location: config.nextMeetingLocation || '',
+        frequency: config.meetingFrequency || ''
+      });
+    }).catch(error => {
+      console.error('Failed to load brand config:', error);
+      setBrandName('Welcome');
+    });
+  }, []);
+
   return (
     <Layout>
       {/* Hero Section */}
@@ -13,7 +37,7 @@ const HomePage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-heading font-bold mb-6 leading-tight">
-              Welcome to SW Volusia Democrats
+              Welcome to {brandName}
             </h1>
             <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto font-light">
               Join us in making a difference in our community. Together, we can create positive change through grassroots activism and local engagement.
@@ -102,10 +126,10 @@ const HomePage: React.FC = () => {
             <div className="mt-8 lg:mt-0">
               <div className="bg-white/10 rounded-lg p-6 backdrop-blur-sm">
                 <h3 className="text-xl font-heading font-semibold mb-3">Next Meeting</h3>
-                <p className="mb-2"><strong>Date:</strong> 2nd Tuesday of the month</p>
-                <p className="mb-2"><strong>Time:</strong> Doors open at 6:00 PM, Meeting at 6:30 PM</p>
-                <p className="mb-4"><strong>Location:</strong> SW Community Center</p>
-                <p className="text-sm text-primary-100">Meetings are held monthly on the 2nd Tuesday</p>
+                <p className="mb-2"><strong>Date:</strong> {meetingInfo.date}</p>
+                <p className="mb-2"><strong>Time:</strong> {meetingInfo.time}</p>
+                <p className="mb-4"><strong>Location:</strong> {meetingInfo.location}</p>
+                <p className="text-sm text-primary-100">{meetingInfo.frequency}</p>
               </div>
             </div>
           </div>

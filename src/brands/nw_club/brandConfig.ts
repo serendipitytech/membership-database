@@ -13,5 +13,13 @@ export const brandConfig = {
   nextMeetingDate: "4th Thursday of the month",
   nextMeetingTime: "Doors open at 6:30 PM, Meeting at 7:00 PM",
   nextMeetingLocation: "DeLand Garden Club",
-  meetingFrequency: "monthly on the 4th Thursday"
+  meetingFrequency: "monthly on the 4th Thursday",
+
+  socialLinks: {
+    facebook: "https://www.facebook.com/NWDemocrats",
+    twitter: "",
+    instagram: "https://www.instagram.com/nwdemocrats/",
+    youtube: "https://youtube.com/@NWDemocrats",
+    bluesky: "https://bsky.app/profile/nwdemocrats.bsky.social"
+  }
 };
