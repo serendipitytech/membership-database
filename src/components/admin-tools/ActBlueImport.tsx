@@ -6,6 +6,7 @@ import Card from '../UI/Card';
 import { supabase } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import { brandConfig } from '../../brand';
 
 const timeZone = 'America/New_York';
 
@@ -44,13 +45,8 @@ interface Progress {
 }
 
 // Add known URLs for classification
-const MEMBERSHIP_URLS = [
-  'https://secure.actblue.com/page/nwannualmembership',
-  'https://secure.actblue.com/page/nwclub-sustainer',
-];
-const NON_MEMBERSHIP_URLS = [
-  'https://secure.actblue.com/page/nwswag',
-];
+const MEMBERSHIP_URLS = brandConfig.actBlueUrls.membership;
+const NON_MEMBERSHIP_URLS = brandConfig.actBlueUrls.nonMembership;
 
 // Add known kinds for classification
 const MEMBERSHIP_KINDS = [

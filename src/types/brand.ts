@@ -4,11 +4,29 @@ export interface BrandConfig {
   colors: {
     primary: {
       DEFAULT: string;
-      [key: string]: string;
+      50: string;
+      100: string;
+      200: string;
+      300: string;
+      400: string;
+      500: string;
+      600: string;
+      700: string;
+      800: string;
+      900: string;
     };
     secondary: {
       DEFAULT: string;
-      [key: string]: string;
+      50: string;
+      100: string;
+      200: string;
+      300: string;
+      400: string;
+      500: string;
+      600: string;
+      700: string;
+      800: string;
+      900: string;
     };
   };
   supabaseUrl: string;
@@ -28,5 +46,11 @@ export interface BrandConfig {
     instagram?: string;
     youtube?: string;
     bluesky?: string;
+  };
+  // Donation Links
+  actBlueUrl: string;
+  actBlueUrls: {
+    membership: string[];
+    nonMembership: string[];
   };
 } 

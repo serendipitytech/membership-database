@@ -1,7 +1,7 @@
 import { BrandConfig } from '../../types/brand';
 
 const brandConfig: BrandConfig = {
-  name: "SW Volusia Democrats",
+  name: "SW Democrats",
   logo: "/logo.svg",
   colors: {
     primary: {
@@ -35,20 +35,28 @@ const brandConfig: BrandConfig = {
   supabaseKey: import.meta.env.VITE_SUPABASE_KEY,
   
   // Contact Information
-  contactEmail: "info@swvdems.org",
-  contactPhone: "(386) 320-3365",
+  contactEmail: "info@swvolusiademocrats.org",
+  contactPhone: "(386) 853-1580",
   
   // Meeting Information
   nextMeetingDate: "2nd Thursday of the month",
-  nextMeetingTime: "Pizza at 5:30 PM, Meeting at 6:00 PM",
-  nextMeetingLocation: "Enterprise Museum",
-  meetingFrequency: "360 Main Street, Enterprise, FL",
+  nextMeetingTime: "Doors open at 6:30 PM, Meeting at 7:00 PM",
+  nextMeetingLocation: "Port Orange Regional Library",
+  meetingFrequency: "monthly on the 2nd Thursday",
 
   socialLinks: {
-    facebook: "https://facebook.com/swdems",
-    twitter: "https://twitter.com/swdems",
-    instagram: "https://instagram.com/swdems",
-    youtube: "https://youtube.com/@swdems"
+    facebook: "https://www.facebook.com/swvdems",
+    twitter: "x.com/swvdems",
+    instagram: "https://www.instagram.com/swvolusiadems/",
+    youtube: "https://www.youtube.com/@SWVDems",
+    bluesky: ""
+  },
+
+  // Donation Links
+  actBlueUrl: "https://secure.actblue.com/donate/swvdems",
+  actBlueUrls: {
+    membership: [],
+    nonMembership: []
   }
 };
 

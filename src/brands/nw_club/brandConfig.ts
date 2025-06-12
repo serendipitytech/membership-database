@@ -50,6 +50,18 @@ const brandConfig: BrandConfig = {
     instagram: "https://www.instagram.com/nwdemocrats/",
     youtube: "https://youtube.com/@NWDemocrats",
     bluesky: "https://bsky.app/profile/nwdemocrats.bsky.social"
+  },
+
+  // Donation Links
+  actBlueUrl: "https://secure.actblue.com/donate/nwvolusiademocrats",
+  actBlueUrls: {
+    membership: [
+      "https://secure.actblue.com/page/nwannualmembership",
+      "https://secure.actblue.com/page/nwclub-sustainer"
+    ],
+    nonMembership: [
+      "https://secure.actblue.com/page/nwswag"
+    ]
   }
 };
 

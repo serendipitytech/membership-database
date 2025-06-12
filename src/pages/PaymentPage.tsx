@@ -6,6 +6,7 @@ import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
 import { getMemberByEmail, getCurrentUser } from '../lib/supabase';
 import { CreditCard, ExternalLink } from 'lucide-react';
+import { brandConfig } from '../brand';
 
 const PaymentPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -86,7 +87,7 @@ const PaymentPage: React.FC = () => {
 
   const handleActBluePayment = () => {
     // Redirect to ActBlue with the correct parameters
-    window.location.href = `https://secure.actblue.com/donate/nwclub-sustainer?amount=${membershipFee}`;
+    window.location.href = `${brandConfig.actBlueUrl}?amount=${membershipFee}`;
     
     setAlert({
       type: 'info',
