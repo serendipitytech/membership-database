@@ -1,4 +1,6 @@
-export const brandConfig = {
+import { BrandConfig } from '../../types/brand';
+
+const brandConfig: BrandConfig = {
   name: "SW Volusia Democrats",
   logo: "/logo.svg",
   colors: {
@@ -48,5 +50,7 @@ export const brandConfig = {
     instagram: "https://instagram.com/swdems",
     youtube: "https://youtube.com/@swdems"
   }
-}; 
+};
+
+export default { brandConfig }; 
 
