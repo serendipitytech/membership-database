@@ -8,7 +8,7 @@ import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
 import CheckboxGroup from '../../components/Form/CheckboxGroup';
 import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight, Grid, List, HelpCircle, X, Home } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 import {
@@ -1321,9 +1321,7 @@ const AdminMembers: React.FC = () => {
                     {selectedMember.birthdate && (
                       <div>
                         <label className="block text-sm font-medium text-gray-500">Birthdate</label>
-                        <p className="mt-1 text-sm text-gray-900">
-                          {format(new Date(selectedMember.birthdate), 'MMMM d, yyyy')}
-                        </p>
+                        <p className="mt-1 text-sm text-gray-900">{format(parse(selectedMember.birthdate, 'yyyy-MM-dd', new Date()), 'MMMM d, yyyy')}</p>
                       </div>
                     )}
                     {selectedMember.tshirt_size && (

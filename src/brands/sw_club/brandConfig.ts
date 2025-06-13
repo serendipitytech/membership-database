@@ -58,6 +58,7 @@ const brandConfig: BrandConfig = {
     membership: [],
     nonMembership: []
   }
+  timezone: 'America/New_York',
 };
 
 export default { brandConfig }; 

@@ -11,7 +11,7 @@ import { User, Edit, X, LogOut } from 'lucide-react';
 import { getCurrentUser, getMemberByEmail, getMemberInterests, getMemberVolunteerHours, getMemberAttendance, getMemberPayments } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../lib/pickLists';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { formatPhoneNumber } from '../lib/formValidation';
 
 interface MemberData {
@@ -509,7 +509,7 @@ const AccountPage: React.FC = () => {
                         <div>
                           <dt className="text-sm font-medium text-gray-500">Birthdate</dt>
                           <dd className="mt-1 text-sm text-gray-900">
-                            {memberData?.birthdate ? new Date(memberData.birthdate).toLocaleDateString() : 'Not provided'}
+                            {memberData?.birthdate ? format(parse(memberData.birthdate, 'yyyy-MM-dd', new Date()), 'MMMM d, yyyy') : 'Not provided'}
                           </dd>
                         </div>
                         <div>

@@ -62,7 +62,9 @@ const brandConfig: BrandConfig = {
     nonMembership: [
       "https://secure.actblue.com/page/nwswag"
     ]
-  }
+  },
+
+  timezone: 'America/New_York',
 };
 
 export default { brandConfig };

@@ -53,4 +53,5 @@ export interface BrandConfig {
     membership: string[];
     nonMembership: string[];
   };
+  timezone?: string;
 } 
