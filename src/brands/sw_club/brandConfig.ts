@@ -57,7 +57,7 @@ const brandConfig: BrandConfig = {
   actBlueUrls: {
     membership: [],
     nonMembership: []
-  }
+  },
   timezone: 'America/New_York',
 };
 
