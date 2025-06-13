@@ -31,7 +31,7 @@ interface MemberData {
   is_admin: boolean;
   is_cell_phone?: boolean;
   tshirt_size?: string;
-  date_of_birth?: string;
+  birthdate?: string;
   special_skills?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
@@ -467,8 +467,8 @@ const AccountPage: React.FC = () => {
                           <label className="block text-sm font-medium text-gray-700">Birthdate</label>
                           <input
                             type="date"
-                            value={editedData.date_of_birth || ''}
-                            onChange={(e) => setEditedData({ ...editedData, date_of_birth: e.target.value })}
+                            value={editedData.birthdate || ''}
+                            onChange={(e) => setEditedData({ ...editedData, birthdate: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                             max={new Date().toISOString().split('T')[0]}
                           />
@@ -509,7 +509,7 @@ const AccountPage: React.FC = () => {
                         <div>
                           <dt className="text-sm font-medium text-gray-500">Birthdate</dt>
                           <dd className="mt-1 text-sm text-gray-900">
-                            {memberData?.date_of_birth ? new Date(memberData.date_of_birth).toLocaleDateString() : 'Not provided'}
+                            {memberData?.birthdate ? new Date(memberData.birthdate).toLocaleDateString() : 'Not provided'}
                           </dd>
                         </div>
                         <div>

@@ -38,7 +38,7 @@ const MEMBER_FIELDS = [
   { id: 'city', label: 'City', required: false },
   { id: 'state', label: 'State', required: false },
   { id: 'zip', label: 'ZIP', required: false },
-  { id: 'date_of_birth', label: 'Date of Birth', required: false },
+  { id: 'birthdate', label: 'Birthdate', required: false },
   { id: 'tell_us_more', label: 'Tell Us More', required: false },
   { id: 'emergency_contact_name', label: 'Emergency Contact Name', required: false },
   { id: 'emergency_contact_phone', label: 'Emergency Contact Phone', required: false },
@@ -323,7 +323,7 @@ const ImportManager: React.FC = () => {
 
   // Helper: Get transformation options for a field
   const getTransformationOptions = (fieldId: string) => {
-    if (fieldId === 'date_of_birth') return TRANSFORMATION_TYPES.DATE.formats;
+    if (fieldId === 'birthdate') return TRANSFORMATION_TYPES.DATE.formats;
     // No transformation for phone, always digits only
     return null;
   };
@@ -331,7 +331,7 @@ const ImportManager: React.FC = () => {
   // Helper: Apply transformation to a value
   const applyTransformation = (fieldId: string, value: any, transformation: string) => {
     if (!value) return value;
-    if (fieldId === 'date_of_birth') {
+    if (fieldId === 'birthdate') {
       // Try to parse and format date
       try {
         let parsed;

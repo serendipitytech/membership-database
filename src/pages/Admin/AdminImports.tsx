@@ -78,7 +78,7 @@ const MEMBER_FIELDS = [
   { id: 'city', label: 'City', required: false },
   { id: 'state', label: 'State', required: false },
   { id: 'zip', label: 'ZIP', required: false },
-  { id: 'date_of_birth', label: 'Date of Birth', required: false },
+  { id: 'birthdate', label: 'Birthdate', required: false },
   { id: 'tell_us_more', label: 'Tell Us More', required: false },
   { id: 'emergency_contact_name', label: 'Emergency Contact Name', required: false },
   { id: 'emergency_contact_phone', label: 'Emergency Contact Phone', required: false },
@@ -677,7 +677,7 @@ const AdminImports: React.FC = () => {
               value = value ? value.replace(/\D/g, '') : null;
               value = value && value.length === 10 ? value : null;
               break;
-            case 'date_of_birth':
+            case 'birthdate':
             case 'registration_date':
             case 'joined_date':
             case 'renewal_date':
@@ -882,7 +882,7 @@ const AdminImports: React.FC = () => {
         let displayValue = value;
         if (field.id === 'phone' || field.id === 'emergency_contact_phone') {
           displayValue = value ? value.replace(/\D/g, '') : '';
-        } else if (field.id === 'date_of_birth' && value) {
+        } else if (field.id === 'birthdate' && value) {
           for (const format of TRANSFORMATION_TYPES.DATE.formats) {
             try {
               const date = parse(value, format.value, new Date());

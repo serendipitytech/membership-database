@@ -35,7 +35,7 @@ interface FormData {
   state: string;
   zip: string;
   membership_type: string;
-  date_of_birth: string;
+  birthdate: string;
   tshirt_size: string;
   precinct: string;
   voter_id: string;
@@ -57,7 +57,7 @@ const initialFormData: FormData = {
   state: 'FL',
   zip: '',
   membership_type: '',
-  date_of_birth: '',
+  birthdate: '',
   tshirt_size: '',
   precinct: '',
   voter_id: '',
@@ -173,7 +173,7 @@ const RegistrationPage: React.FC = () => {
         return validateEmail(value as string) ? null : 'Please enter a valid email address';
       case 'zip':
         return validateZipCode(value as string) ? null : 'Please enter a valid 5-digit ZIP code';
-      case 'date_of_birth':
+      case 'birthdate':
         return validateDate(value as string) ? null : 'Please enter a valid date in the past';
       case 'address':
         return validateAddress(value as string) ? null : 'Please enter a valid address';
@@ -384,13 +384,13 @@ const RegistrationPage: React.FC = () => {
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <TextField
-          id="date_of_birth"
+          id="birthdate"
           label="Birthdate"
           type="date"
-          value={formData.date_of_birth}
+          value={formData.birthdate}
           onChange={handleChange}
           required
-          error={fieldErrors['date_of_birth']}
+          error={fieldErrors['birthdate']}
         />
         <SelectField
           id="tshirt_size"

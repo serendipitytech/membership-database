@@ -69,7 +69,7 @@ interface Member {
   precinct: string;
   tell_us_more: string;
   voter_id?: string;
-  date_of_birth?: string;
+  birthdate?: string;
   tshirt_size?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
@@ -1318,11 +1318,11 @@ const AdminMembers: React.FC = () => {
                         <p className="mt-1 text-sm text-gray-900">{selectedMember.voter_id}</p>
                       </div>
                     )}
-                    {selectedMember.date_of_birth && (
+                    {selectedMember.birthdate && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-500">Birthday</label>
+                        <label className="block text-sm font-medium text-gray-500">Birthdate</label>
                         <p className="mt-1 text-sm text-gray-900">
-                          {format(new Date(selectedMember.date_of_birth), 'MMMM d, yyyy')}
+                          {format(new Date(selectedMember.birthdate), 'MMMM d, yyyy')}
                         </p>
                       </div>
                     )}
@@ -1499,11 +1499,11 @@ const AdminMembers: React.FC = () => {
                     required
                   />
                   <TextField
-                    label="Birthday"
-                    name="date_of_birth"
+                    label="Birthdate"
+                    name="birthdate"
                     type="date"
-                    value={selectedMember.date_of_birth ? new Date(selectedMember.date_of_birth).toISOString().split('T')[0] : ''}
-                    onChange={(e) => setSelectedMember({...selectedMember, date_of_birth: e.target.value})}
+                    value={selectedMember.birthdate ? new Date(selectedMember.birthdate).toISOString().split('T')[0] : ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, birthdate: e.target.value})}
                   />
                   <TextField
                     label="Phone"
@@ -1716,11 +1716,11 @@ const AdminMembers: React.FC = () => {
                     error={fieldErrors.email}
                   />
                   <TextField
-                    label="Birthday"
-                    name="date_of_birth"
+                    label="Birthdate"
+                    name="birthdate"
                     type="date"
-                    value={selectedMember.date_of_birth ? new Date(selectedMember.date_of_birth).toISOString().split('T')[0] : ''}
-                    onChange={(e) => setSelectedMember({...selectedMember, date_of_birth: e.target.value})}
+                    value={selectedMember.birthdate ? new Date(selectedMember.birthdate).toISOString().split('T')[0] : ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, birthdate: e.target.value})}
                   />
                   <TextField
                     label="Phone"
