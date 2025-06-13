@@ -20,6 +20,7 @@ import AdminAttendance from './pages/Admin/AdminAttendance';
 import AdminImports from './pages/Admin/AdminImports';
 import RequireAuth from './components/Auth/RequireAuth';
 import NotAuthorized from './pages/NotAuthorized';
+import { Analytics } from '@vercel/analytics/react';
 
 function App() {
   return (
@@ -45,6 +46,7 @@ function App() {
         <Route path="/not-authorized" element={<NotAuthorized />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <Analytics />
     </BrowserRouter>
   );
 }
