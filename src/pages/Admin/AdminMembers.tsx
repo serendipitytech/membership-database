@@ -8,7 +8,7 @@ import TextField from '../../components/Form/TextField';
 import SelectField from '../../components/Form/SelectField';
 import CheckboxGroup from '../../components/Form/CheckboxGroup';
 import { Users, Search, Filter, Edit2, Clock, Calendar, Plus, Trash2, Download, ChevronDown, ChevronRight, Grid, List, HelpCircle, X, Home } from 'lucide-react';
-import { format, parse } from 'date-fns';
+import { format, parse, isValid, formatDistanceToNow } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 import {
@@ -77,6 +77,7 @@ interface Member {
   special_skills?: string;
   health_issues?: string;
   household_id?: string;
+  updated_at?: string;
 }
 
 interface InterestCategory {
@@ -112,7 +113,7 @@ const AdminMembers: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [householdCounts, setHouseholdCounts] = useState<{[householdId: string]: number}>({});
-  const [sortField, setSortField] = useState<'last_name' | 'first_name' | 'email' | 'status'>('last_name');
+  const [sortField, setSortField] = useState<'last_name' | 'first_name' | 'email' | 'status' | 'updated_at'>('last_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -121,6 +122,7 @@ const AdminMembers: React.FC = () => {
     { value: 'first_name', label: 'First Name' },
     { value: 'email', label: 'Email' },
     { value: 'status', label: 'Status' },
+    { value: 'updated_at', label: 'Last Updated' },
   ];
 
   const usStates = [
@@ -927,6 +929,25 @@ const AdminMembers: React.FC = () => {
               </div>
             )}
           </div>
+          
+          {(() => {
+            let display = 'Never updated';
+            if (member.updated_at) {
+              try {
+                const parsed = new Date(member.updated_at);
+                if (isValid(parsed)) {
+                  display = `Last updated ${formatDistanceToNow(parsed, { addSuffix: true })}`;
+                } else {
+                  console.warn('Invalid parsed date for updated_at:', member.updated_at, parsed);
+                }
+              } catch (err) {
+                console.error('Error parsing updated_at:', member.updated_at, err);
+              }
+            }
+            return (
+              <div className="text-xs text-gray-500 mt-1">{display}</div>
+            );
+          })()}
         </div>
       </Card>
     );

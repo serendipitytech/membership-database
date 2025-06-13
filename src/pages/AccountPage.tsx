@@ -219,7 +219,8 @@ const AccountPage: React.FC = () => {
             address: editedData.address,
             city: editedData.city,
             state: editedData.state,
-            zip: editedData.zip
+            zip: editedData.zip,
+            updated_at: new Date().toISOString()
           })
           .eq('email', memberData?.email);
 
