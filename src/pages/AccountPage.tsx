@@ -6,11 +6,13 @@ import SelectField from '../components/Form/SelectField';
 import Button from '../components/UI/Button';
 import Alert from '../components/UI/Alert';
 import Badge from '../components/UI/Badge';
+import Card from '../components/UI/Card';
 import { User, Edit, X, LogOut } from 'lucide-react';
 import { getCurrentUser, getMemberByEmail, getMemberInterests, getMemberVolunteerHours, getMemberAttendance, getMemberPayments } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../lib/pickLists';
 import { format } from 'date-fns';
+import { formatPhoneNumber } from '../lib/formValidation';
 
 interface MemberData {
   id: string;
@@ -359,8 +361,17 @@ const AccountPage: React.FC = () => {
                       <div className="space-y-4">
                         <TextField
                           label="Phone"
-                          value={editedData.phone || ''}
-                          onChange={(e) => setEditedData({ ...editedData, phone: e.target.value })}
+                          id="phone"
+                          type="tel"
+                          value={formatPhoneNumber(editedData.phone || '')}
+                          onChange={(e) => {
+                            // Only store digits
+                            const digits = e.target.value.replace(/\D/g, '');
+                            if (digits.length <= 10) {  // Only allow up to 10 digits
+                              setEditedData({ ...editedData, phone: digits });
+                            }
+                          }}
+                          placeholder="(555) 555-5555"
                         />
                         <div className="flex items-center space-x-2">
                           <input
@@ -380,7 +391,7 @@ const AccountPage: React.FC = () => {
                         <div>
                           <dt className="text-sm font-medium text-gray-500">Phone</dt>
                           <dd className="mt-1 text-sm text-gray-900">
-                            {memberData?.phone || 'Not provided'}
+                            {memberData?.phone ? formatPhoneNumber(memberData.phone) : 'Not provided'}
                             {memberData?.is_cell_phone && <span className="ml-2 text-xs text-gray-500">(Cell)</span>}
                           </dd>
                         </div>
@@ -452,12 +463,17 @@ const AccountPage: React.FC = () => {
                   {isEditing ? (
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
-                        <TextField
-                          label="Birthdate"
-                          type="date"
-                          value={editedData.date_of_birth || ''}
-                          onChange={(e) => setEditedData({ ...editedData, date_of_birth: e.target.value })}
-                        />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Birthdate</label>
+                          <input
+                            type="date"
+                            value={editedData.date_of_birth || ''}
+                            onChange={(e) => setEditedData({ ...editedData, date_of_birth: e.target.value })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                            max={new Date().toISOString().split('T')[0]}
+                          />
+                          <p className="mt-1 text-sm text-gray-500">Select your date of birth</p>
+                        </div>
                         <SelectField
                           label="T-Shirt Size"
                           value={editedData.tshirt_size || ''}
@@ -531,8 +547,17 @@ const AccountPage: React.FC = () => {
                       />
                       <TextField
                         label="Emergency Contact Phone"
-                        value={editedData.emergency_contact_phone || ''}
-                        onChange={(e) => setEditedData({ ...editedData, emergency_contact_phone: e.target.value })}
+                        id="emergency_contact_phone"
+                        type="tel"
+                        value={formatPhoneNumber(editedData.emergency_contact_phone || '')}
+                        onChange={(e) => {
+                          // Only store digits
+                          const digits = e.target.value.replace(/\D/g, '');
+                          if (digits.length <= 10) {  // Only allow up to 10 digits
+                            setEditedData({ ...editedData, emergency_contact_phone: digits });
+                          }
+                        }}
+                        placeholder="(555) 555-5555"
                       />
                       <TextField
                         label="Relationship"
@@ -548,7 +573,9 @@ const AccountPage: React.FC = () => {
                       </div>
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Emergency Contact Phone</dt>
-                        <dd className="mt-1 text-sm text-gray-900">{memberData?.emergency_contact_phone || 'Not provided'}</dd>
+                        <dd className="mt-1 text-sm text-gray-900">
+                          {memberData?.emergency_contact_phone ? formatPhoneNumber(memberData.emergency_contact_phone) : 'Not provided'}
+                        </dd>
                       </div>
                       <div>
                         <dt className="text-sm font-medium text-gray-500">Relationship</dt>

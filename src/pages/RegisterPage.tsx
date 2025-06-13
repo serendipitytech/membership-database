@@ -18,7 +18,7 @@ const RegisterPage: React.FC = () => {
     phone: '',
     is_cell_phone: true,
     tshirt_size: '',
-    birthdate: '',
+    date_of_birth: '',
     special_skills: '',
     emergency_contact_name: '',
     emergency_contact_phone: '',
@@ -53,7 +53,7 @@ const RegisterPage: React.FC = () => {
           phone: formData.phone,
           is_cell_phone: formData.is_cell_phone,
           tshirt_size: formData.tshirt_size,
-          birthdate: formData.birthdate,
+          birthdate: formData.date_of_birth,
           special_skills: formData.special_skills,
           emergency_contact_name: formData.emergency_contact_name,
           emergency_contact_phone: formData.emergency_contact_phone,
@@ -179,9 +179,9 @@ const RegisterPage: React.FC = () => {
               </div>
               <TextField
                 label="Birthdate"
-                name="birthdate"
+                name="date_of_birth"
                 type="date"
-                value={formData.birthdate}
+                value={formData.date_of_birth}
                 onChange={handleChange}
                 required
               />

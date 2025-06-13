@@ -1499,10 +1499,31 @@ const AdminMembers: React.FC = () => {
                     required
                   />
                   <TextField
+                    label="Birthday"
+                    name="date_of_birth"
+                    type="date"
+                    value={selectedMember.date_of_birth ? new Date(selectedMember.date_of_birth).toISOString().split('T')[0] : ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, date_of_birth: e.target.value})}
+                  />
+                  <TextField
                     label="Phone"
                     name="phone"
-                    value={selectedMember.phone || ''}
-                    onChange={(e) => setSelectedMember({...selectedMember, phone: e.target.value})}
+                    type="tel"
+                    value={formatPhoneNumber(selectedMember.phone || '')}
+                    onChange={(e) => {
+                      // Only store digits
+                      const digits = e.target.value.replace(/\D/g, '');
+                      if (digits.length <= 10) {  // Only allow up to 10 digits
+                        setSelectedMember({...selectedMember, phone: digits});
+                        setFieldErrors(prev => ({
+                          ...prev,
+                          phone: digits.length === 10 ? '' : 'Please enter a valid 10-digit phone number'
+                        }));
+                      }
+                    }}
+                    required
+                    error={fieldErrors.phone}
+                    placeholder="(555) 555-5555"
                   />
                   <TextField
                     label="Address"
@@ -1688,22 +1709,34 @@ const AdminMembers: React.FC = () => {
                     type="email"
                     value={selectedMember.email || ''}
                     onChange={e => {
-                      setSelectedMember({ ...selectedMember, email: e.target.value.toLowerCase().trim() });
+                      setSelectedMember({ ...selectedMember, email: e.target.value });
                       setFieldErrors(prev => ({ ...prev, email: '' }));
                     }}
                     required
                     error={fieldErrors.email}
                   />
                   <TextField
+                    label="Birthday"
+                    name="date_of_birth"
+                    type="date"
+                    value={selectedMember.date_of_birth ? new Date(selectedMember.date_of_birth).toISOString().split('T')[0] : ''}
+                    onChange={(e) => setSelectedMember({...selectedMember, date_of_birth: e.target.value})}
+                  />
+                  <TextField
                     label="Phone"
                     name="phone"
                     type="tel"
                     value={formatPhoneNumber(selectedMember.phone || '')}
-                    onChange={e => {
+                    onChange={(e) => {
                       // Only store digits
                       const digits = e.target.value.replace(/\D/g, '');
-                      setSelectedMember({ ...selectedMember, phone: digits });
-                      setFieldErrors(prev => ({ ...prev, phone: '' }));
+                      if (digits.length <= 10) {  // Only allow up to 10 digits
+                        setSelectedMember({...selectedMember, phone: digits});
+                        setFieldErrors(prev => ({
+                          ...prev,
+                          phone: digits.length === 10 ? '' : 'Please enter a valid 10-digit phone number'
+                        }));
+                      }
                     }}
                     required
                     error={fieldErrors.phone}

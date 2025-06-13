@@ -6,7 +6,7 @@ import Card from '../UI/Card';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
-import { format, parse } from 'date-fns';
+import { format, parse, isValid } from 'date-fns';
 
 interface ImportPreview {
   headers: string[];
@@ -340,9 +340,18 @@ const ImportManager: React.FC = () => {
         else if (transformation === 'yyyy-MM-dd') parsed = parse(value, 'yyyy-MM-dd', new Date());
         else if (transformation === 'MMMM d, yyyy') parsed = parse(value, 'MMMM d, yyyy', new Date());
         else parsed = new Date(value);
+
+        // Validate that the date is in the past
+        if (!isValid(parsed) || parsed > new Date()) {
+          console.warn(`Invalid date of birth: ${value}`);
+          return null;
+        }
+
+        // Format as YYYY-MM-DD for storage
         return format(parsed, 'yyyy-MM-dd');
-      } catch {
-        return value;
+      } catch (e) {
+        console.warn(`Failed to parse date: ${value}`, e);
+        return null;
       }
     }
     // No transformation for phone
