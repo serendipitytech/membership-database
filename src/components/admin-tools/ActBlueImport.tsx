@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { brandConfig } from '../../brand';
+import Papa from 'papaparse';
 
 const timeZone = 'America/New_York';
 
@@ -27,6 +28,7 @@ interface UnmatchedPayment {
   selectedMemberId?: string;
   action?: 'create' | 'match' | 'skip';
   fundraisingPageUrl?: string;
+  urlSlug?: string;
   recurringType?: string;
   kind?: string;
 }
@@ -326,65 +328,135 @@ const ActBlueImport: React.FC = () => {
     setProgress({ current: 0, total: 0, message: 'Reading file...' });
     try {
       const text = await file.text();
-      const rows = text.split('\n').map(row => row.split(','));
-      const headers = rows[0];
-      const data = rows.slice(1);
-      setProgress({ current: 0, total: data.length, message: 'Processing payments...' });
+      console.log('Raw CSV text (first 500 chars):', text.substring(0, 500));
+      
+      // Use PapaParse for robust CSV parsing
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+      console.log('PapaParse result:', parsed);
+      console.log('Available columns:', parsed.meta.fields);
+      console.log('First row sample:', parsed.data[0]);
+      
+      const rows = parsed.data as any[];
+      setProgress({ current: 0, total: rows.length, message: 'Processing payments...' });
+      
       // Gather all receipt IDs from the CSV
-      const receiptIdsFromCsv = data.map(row => row[headers.indexOf('Receipt ID')]).filter(Boolean);
+      const receiptIdsFromCsv = rows.map(row => row['Receipt ID']).filter(Boolean);
+      
       // Query Supabase for existing payments with these receipt IDs
       const { data: existingPayments, error: existingError } = await supabase
         .from('payments')
         .select('receipt_id')
         .in('receipt_id', receiptIdsFromCsv);
+      
       if (existingError) {
         throw existingError;
       }
+      
       const existingReceiptIds = new Set((existingPayments || []).map(p => p.receipt_id));
+      
       // Filter out duplicates
       let skipped = 0;
       const imported: UnmatchedPayment[] = [];
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        if (row.length < headers.length) continue;
-        const receiptId = row[headers.indexOf('Receipt ID')];
-        if (!receiptId) continue;
-        if (existingReceiptIds.has(receiptId)) {
-          skipped++;
+      
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        console.log(`Processing row ${i}:`, row);
+        
+        const receiptId = row['Receipt ID'];
+        console.log('Receipt ID:', receiptId);
+        
+        if (!receiptId) {
+          console.log('Skipping row - no receipt ID');
           continue;
         }
-        const email = row[headers.indexOf('Donor Email')];
-        if (!email) continue;
+        
+        if (existingReceiptIds.has(receiptId)) {
+          skipped++;
+          console.log('Skipping existing payment:', receiptId);
+          continue;
+        }
+        
+        const email = row['Donor Email'];
+        console.log('Donor Email:', email);
+        
+        if (!email) {
+          console.log('Skipping row - no email');
+          continue;
+        }
+        
         // Auto-match by email
         const { data: memberList } = await supabase
           .from('members')
           .select('id, email');
         const match = memberList?.find(m => m.email?.trim().toLowerCase() === email.trim().toLowerCase());
+        
+        // Extract URL and slug
+        const url = row['Fundraising Page'] || '';
+        console.log('Fundraising Page URL:', url);
+        
+        let urlSlug = '';
+        if (url) {
+          console.log('Processing URL:', url);
+          try {
+            const urlObj = new URL(url);
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
+            urlSlug = pathParts[pathParts.length - 1] || '';
+            console.log('Extracted URL slug:', urlSlug);
+          } catch (e) {
+            // Fallback to simple split if URL parsing fails
+            urlSlug = url.split('/').filter(Boolean).pop() || '';
+            console.log('Fallback URL slug:', urlSlug);
+          }
+        } else {
+          console.log('No URL found for payment:', receiptId);
+        }
+        
         // Trim whitespace from Kind and Recurring Type
-        const kind = row[headers.indexOf('Kind')]?.trim() || '';
-        const recurringType = row[headers.indexOf('Recurring Type')]?.trim() || '';
+        const kind = row['Kind']?.trim() || '';
+        const recurringType = row['Recurring Type']?.trim() || '';
+        
+        console.log('Payment analysis:', {
+          receiptId,
+          url,
+          urlSlug,
+          kind,
+          recurringType,
+          isRecurring: !!row['Recurring Total Months']
+        });
+        
         imported.push({
           receiptId,
-          date: row[headers.indexOf('Date')],
-          amount: parseFloat(row[headers.indexOf('Amount')]),
-          isRecurring: row[headers.indexOf('Recurring Total Months')] ? true : false,
+          date: row['Date'],
+          amount: parseFloat(row['Amount']),
+          isRecurring: !!row['Recurring Total Months'],
           donorEmail: email.toLowerCase().trim(),
-          donorFirstName: row[headers.indexOf('Donor First Name')],
-          donorLastName: row[headers.indexOf('Donor Last Name')],
-          donorAddress: row[headers.indexOf('Donor Addr1')],
-          donorCity: row[headers.indexOf('Donor City')],
-          donorState: row[headers.indexOf('Donor State')],
-          donorZip: row[headers.indexOf('Donor ZIP')],
-          donorPhone: row[headers.indexOf('Donor Phone')],
+          donorFirstName: row['Donor First Name'],
+          donorLastName: row['Donor Last Name'],
+          donorAddress: row['Donor Addr1'],
+          donorCity: row['Donor City'],
+          donorState: row['Donor State'],
+          donorZip: row['Donor ZIP'],
+          donorPhone: row['Donor Phone'],
           rawData: row,
-          fundraisingPageUrl: row[headers.indexOf('Fundraising Page')],
+          fundraisingPageUrl: url,
+          urlSlug,
           recurringType,
           kind,
           selectedMemberId: match ? match.id : undefined,
           action: match ? 'match' : undefined
         });
+        
         setProgress((prev: Progress | null) => prev ? { ...prev, current: i + 1 } : null);
       }
+      
+      console.log('Final imported payments count:', imported.length);
+      console.log('Imported payments with URL slugs:', imported.map(p => ({
+        receiptId: p.receiptId,
+        url: p.fundraisingPageUrl,
+        urlSlug: p.urlSlug,
+        donorEmail: p.donorEmail
+      })));
+      
       setAllPayments(imported);
       setSkippedDuplicates(skipped);
       setAlert({
@@ -482,12 +554,37 @@ const ActBlueImport: React.FC = () => {
 
   // Step 3: On Import, only insert payments classified as 'membership' and matched to a member
   const handleImport = async () => {
-    const toImport = classifiedPayments.membership.filter(p => p.selectedMemberId);
+    // Get payments that are matched to existing members
+    const matchedPayments = classifiedPayments.membership.filter(p => p.selectedMemberId);
+    
+    // Get payments that are marked for member creation
+    const createPayments = classifiedPayments.membership.filter(p => p.action === 'create');
+    
     setIsProcessing(true);
-    setImportProgress({ current: 0, total: toImport.length, message: 'Importing payments...' });
+    setImportProgress({ current: 0, total: matchedPayments.length + createPayments.length, message: 'Importing payments...' });
+    
     try {
-      for (let i = 0; i < toImport.length; i++) {
-        const payment = toImport[i];
+      let processedCount = 0;
+      
+      // First, create new members for payments marked for creation
+      for (let i = 0; i < createPayments.length; i++) {
+        const payment = createPayments[i];
+        try {
+          const newMember = await createNewMember(payment);
+          processedCount++;
+          setImportProgress({ 
+            current: processedCount, 
+            total: matchedPayments.length + createPayments.length, 
+            message: `Created member for ${payment.donorFirstName} ${payment.donorLastName}` 
+          });
+        } catch (error) {
+          console.error('Error creating member:', error);
+        }
+      }
+      
+      // Then, import payments for existing members
+      for (let i = 0; i < matchedPayments.length; i++) {
+        const payment = matchedPayments[i];
         await supabase.from('payments').insert([{
           member_id: payment.selectedMemberId,
           amount: payment.amount,
@@ -498,9 +595,15 @@ const ActBlueImport: React.FC = () => {
           receipt_id: payment.receiptId,
           notes: 'Imported from ActBlue'
         }]);
-        setImportProgress({ current: i + 1, total: toImport.length, message: `Importing payment ${i + 1} of ${toImport.length}` });
+        processedCount++;
+        setImportProgress({ 
+          current: processedCount, 
+          total: matchedPayments.length + createPayments.length, 
+          message: `Imported payment ${processedCount} of ${matchedPayments.length + createPayments.length}` 
+        });
       }
-      setAlert({ type: 'success', message: `${toImport.length} membership payments imported successfully.` });
+      
+      setAlert({ type: 'success', message: `${processedCount} payments processed successfully.` });
       setStep(1);
       setAllPayments([]);
       setClassifiedPayments({ membership: [], nonMembership: [], unclassified: [] });
@@ -615,7 +718,19 @@ const ActBlueImport: React.FC = () => {
                     <div>
                       <div className="font-medium">{payment.donorFirstName} {payment.donorLastName}</div>
                       <div className="text-sm text-gray-500">{payment.donorEmail}</div>
-                      <div className="text-sm">${payment.amount} on {payment.date}</div>
+                      <div className="text-sm">
+                        ${payment.amount} on {payment.date}
+                        {payment.isRecurring && (
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Recurring
+                          </span>
+                        )}
+                        {payment.urlSlug && (
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {payment.urlSlug}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="relative w-64">
@@ -902,7 +1017,9 @@ const ActBlueImport: React.FC = () => {
               <Button
                 variant="primary"
                 onClick={() => setStep(3)}
-                disabled={classifiedPayments.membership.some(p => !members.find(m => m.id === p.selectedMemberId))}
+                disabled={classifiedPayments.membership.some(p => 
+                  !members.find(m => m.id === p.selectedMemberId) && p.action !== 'create'
+                )}
               >
                 Continue
               </Button>
@@ -940,7 +1057,9 @@ const ActBlueImport: React.FC = () => {
               <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
               <Button
                 variant="primary"
-                disabled={classifiedPayments.membership.some(p => !members.find(m => m.id === p.selectedMemberId)) || isProcessing}
+                disabled={classifiedPayments.membership.some(p => 
+                  !members.find(m => m.id === p.selectedMemberId) && p.action !== 'create'
+                )}
                 onClick={handleImport}
               >
                 {isProcessing ? 'Importing...' : 'Import'}

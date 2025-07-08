@@ -117,6 +117,50 @@ const AdminMembers: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedExportFields, setSelectedExportFields] = useState<string[]>(['first_name', 'last_name', 'email']);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx'>('csv');
+  const [exportFileName, setExportFileName] = useState('');
+
+  // Available export fields
+  const exportFields = [
+    { id: 'first_name', label: 'First Name', category: 'Basic Info' },
+    { id: 'last_name', label: 'Last Name', category: 'Basic Info' },
+    { id: 'email', label: 'Email', category: 'Basic Info' },
+    { id: 'phone', label: 'Phone', category: 'Basic Info' },
+    { id: 'address', label: 'Address', category: 'Address' },
+    { id: 'city', label: 'City', category: 'Address' },
+    { id: 'state', label: 'State', category: 'Address' },
+    { id: 'zip', label: 'ZIP Code', category: 'Address' },
+    { id: 'precinct', label: 'Precinct', category: 'Political' },
+    { id: 'voter_id', label: 'Voter ID', category: 'Political' },
+    { id: 'membership_type', label: 'Membership Type', category: 'Membership' },
+    { id: 'membershipStatus', label: 'Membership Status', category: 'Membership' },
+    { id: 'created_at', label: 'Join Date', category: 'Membership' },
+    { id: 'renewal_date', label: 'Renewal Date', category: 'Membership' },
+    { id: 'birthdate', label: 'Birthdate', category: 'Personal' },
+    { id: 'tshirt_size', label: 'T-Shirt Size', category: 'Personal' },
+    { id: 'emergency_contact_name', label: 'Emergency Contact Name', category: 'Emergency' },
+    { id: 'emergency_contact_phone', label: 'Emergency Contact Phone', category: 'Emergency' },
+    { id: 'emergency_contact_relationship', label: 'Emergency Contact Relationship', category: 'Emergency' },
+    { id: 'special_skills', label: 'Special Skills', category: 'Personal' },
+    { id: 'health_issues', label: 'Health Issues', category: 'Personal' },
+    { id: 'tell_us_more', label: 'Tell Us More', category: 'Personal' },
+    { id: 'is_admin', label: 'Admin Status', category: 'System' },
+    { id: 'household_id', label: 'Household ID', category: 'System' },
+    { id: 'updated_at', label: 'Last Updated', category: 'System' }
+  ];
+
+  // Group fields by category
+  const groupedFields = exportFields.reduce((acc, field) => {
+    if (!acc[field.category]) {
+      acc[field.category] = [];
+    }
+    acc[field.category].push(field);
+    return acc;
+  }, {} as Record<string, typeof exportFields>);
+
   const sortOptions = [
     { value: 'last_name', label: 'Last Name' },
     { value: 'first_name', label: 'First Name' },
@@ -726,24 +770,152 @@ const AdminMembers: React.FC = () => {
     }
   };
 
+  const handleExportClick = () => {
+    setExportFileName(`members_export_${format(new Date(), 'yyyy-MM-dd')}`);
+    setShowExportModal(true);
+  };
+
+  const handleFieldToggle = (fieldId: string) => {
+    setSelectedExportFields(prev => 
+      prev.includes(fieldId) 
+        ? prev.filter(id => id !== fieldId)
+        : [...prev, fieldId]
+    );
+  };
+
+  const handleSelectAllFields = () => {
+    setSelectedExportFields(exportFields.map(field => field.id));
+  };
+
+  const handleDeselectAllFields = () => {
+    setSelectedExportFields([]);
+  };
+
+  const getFieldValue = (member: Member, fieldId: string): string => {
+    switch (fieldId) {
+      case 'first_name':
+        return member.first_name || '';
+      case 'last_name':
+        return member.last_name || '';
+      case 'email':
+        return member.email || '';
+      case 'phone':
+        return member.phone || '';
+      case 'address':
+        return member.address || '';
+      case 'city':
+        return member.city || '';
+      case 'state':
+        return member.state || '';
+      case 'zip':
+        return member.zip || '';
+      case 'precinct':
+        return member.precinct || '';
+      case 'voter_id':
+        return member.voter_id || '';
+      case 'membership_type':
+        return member.membership_type || '';
+      case 'membershipStatus':
+        return member.membershipStatus || '';
+      case 'created_at':
+        return member.created_at ? format(new Date(member.created_at), 'MM/dd/yyyy') : '';
+      case 'renewal_date':
+        return member.renewal_date ? format(new Date(member.renewal_date), 'MM/dd/yyyy') : '';
+      case 'birthdate':
+        return member.birthdate ? format(new Date(member.birthdate), 'MM/dd/yyyy') : '';
+      case 'tshirt_size':
+        return member.tshirt_size || '';
+      case 'emergency_contact_name':
+        return member.emergency_contact_name || '';
+      case 'emergency_contact_phone':
+        return member.emergency_contact_phone || '';
+      case 'emergency_contact_relationship':
+        return member.emergency_contact_relationship || '';
+      case 'special_skills':
+        return member.special_skills || '';
+      case 'health_issues':
+        return member.health_issues || '';
+      case 'tell_us_more':
+        return member.tell_us_more || '';
+      case 'is_admin':
+        return member.is_admin ? 'Yes' : 'No';
+      case 'household_id':
+        return member.household_id || '';
+      case 'updated_at':
+        return member.updated_at ? format(new Date(member.updated_at), 'MM/dd/yyyy') : '';
+      default:
+        return '';
+    }
+  };
+
+  const exportToFile = async () => {
+    if (selectedExportFields.length === 0) {
+      setAlert({
+        type: 'error',
+        message: 'Please select at least one field to export'
+      });
+      return;
+    }
+
+    try {
+      // Get the filtered and sorted members
+      const membersToExport = sortedMembers;
+
+      // Get field labels for headers
+      const fieldLabels = selectedExportFields.map(fieldId => {
+        const field = exportFields.find(f => f.id === fieldId);
+        return field ? field.label : fieldId;
+      });
+
+      // Prepare data
+      const exportData = membersToExport.map(member => 
+        selectedExportFields.map(fieldId => getFieldValue(member, fieldId))
+      );
+
+      if (exportFormat === 'csv') {
+        // Export as CSV
+        const csvContent = [
+          fieldLabels.join(','),
+          ...exportData.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${exportFileName}.csv`;
+        link.click();
+      } else {
+        // Export as Excel
+        const XLSX = await import('xlsx');
+        
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet([fieldLabels, ...exportData]);
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Members');
+        
+        // Write file
+        XLSX.writeFile(wb, `${exportFileName}.xlsx`);
+      }
+
+      setShowExportModal(false);
+      setAlert({
+        type: 'success',
+        message: `Exported ${membersToExport.length} members to ${exportFormat.toUpperCase()}`
+      });
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      setAlert({
+        type: 'error',
+        message: 'Failed to export data'
+      });
+    }
+  };
+
+  // Legacy function for backward compatibility
   const exportToCSV = () => {
-    const headers = ['First Name', 'Last Name', 'Email'];
-    const csvData = members.map(member => [
-      member.first_name,
-      member.last_name,
-      member.email
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...csvData.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `members_export_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    link.click();
+    handleExportClick();
   };
 
   const loadMembershipTypes = async () => {
@@ -1059,11 +1231,11 @@ const AdminMembers: React.FC = () => {
             </div>
             <Button
               variant="secondary"
-              onClick={exportToCSV}
+              onClick={handleExportClick}
               className="flex items-center"
             >
               <Download className="h-5 w-5 mr-2" />
-              Export CSV
+              Export
             </Button>
             <Button
               variant="primary"
@@ -1838,6 +2010,141 @@ const AdminMembers: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Export Modal */}
+        {showExportModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Export Members</h2>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Export Summary */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-blue-900 mb-2">Export Summary</h3>
+                  <p className="text-blue-700">
+                    Exporting <strong>{sortedMembers.length}</strong> members 
+                    {searchTerm && ` matching "${searchTerm}"`}
+                    {selectedStatus && ` with status "${selectedStatus}"`}
+                    {selectedInterests.length > 0 && ` with selected interests`}
+                    {selectedPrecinct.length > 0 && ` from selected precincts`}
+                  </p>
+                </div>
+
+                {/* Export Format */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">Export Format</h3>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="csv"
+                        checked={exportFormat === 'csv'}
+                        onChange={(e) => setExportFormat(e.target.value as 'csv' | 'xlsx')}
+                        className="mr-2"
+                      />
+                      CSV
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="xlsx"
+                        checked={exportFormat === 'xlsx'}
+                        onChange={(e) => setExportFormat(e.target.value as 'csv' | 'xlsx')}
+                        className="mr-2"
+                      />
+                      Excel
+                    </label>
+                  </div>
+                </div>
+
+                {/* File Name */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">File Name</h3>
+                  <input
+                    type="text"
+                    value={exportFileName}
+                    onChange={(e) => setExportFileName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Enter file name"
+                  />
+                </div>
+
+                {/* Field Selection */}
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-lg font-medium text-gray-900">Select Fields to Export</h3>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllFields}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeselectAllFields}
+                        className="text-sm text-gray-600 hover:text-gray-800"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+                    {Object.entries(groupedFields).map(([category, fields]) => (
+                      <div key={category} className="space-y-2">
+                        <h4 className="font-medium text-gray-700 text-sm uppercase tracking-wide">
+                          {category}
+                        </h4>
+                        <div className="space-y-1">
+                          {fields.map((field) => (
+                            <label key={field.id} className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedExportFields.includes(field.id)}
+                                onChange={() => handleFieldToggle(field.id)}
+                                className="mr-2"
+                              />
+                              <span className="text-sm">{field.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowExportModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportToFile}
+                    disabled={selectedExportFields.length === 0}
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Export {exportFormat.toUpperCase()}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

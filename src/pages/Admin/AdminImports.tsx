@@ -6,13 +6,14 @@ import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import { Upload, FileText, Users, AlertCircle, Save, Map, Download, X, Search, Plus, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { format, parseISO, parse } from 'date-fns';
+import { format, parseISO, parse, isValid } from 'date-fns';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import * as XLSX from 'xlsx';
 import { getPickListValues, PICK_LIST_CATEGORIES } from '../../lib/pickLists';
 import SelectField from '../../components/Form/SelectField';
 import TextField from '../../components/Form/TextField';
 import DataTable from '../../components/UI/DataTable';
+import Papa from 'papaparse';
 
 const timeZone = 'America/New_York';
 
@@ -29,6 +30,8 @@ interface UnmatchedPayment {
   donorState: string;
   donorZip: string;
   donorPhone: string;
+  url?: string;
+  urlSlug?: string;
   rawData: any;
 }
 
@@ -265,98 +268,179 @@ const AdminImports: React.FC = () => {
     setProgress({ current: 0, total: 0, message: 'Reading file...' });
     try {
       const text = await file.text();
-      const rows = text.split('\n').map(row => row.split(','));
-      const headers = rows[0];
-      const data = rows.slice(1);
-
-      setProgress({ current: 0, total: data.length, message: 'Processing payments...' });
+      console.log('Raw CSV text (first 500 chars):', text.substring(0, 500));
+      
+      // Use PapaParse for robust CSV parsing
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+      console.log('PapaParse result:', parsed);
+      console.log('Available columns:', parsed.meta.fields);
+      console.log('First row sample:', parsed.data[0]);
+      
+      const rows = parsed.data as any[];
+      setProgress({ current: 0, total: rows.length, message: 'Processing payments...' });
       const unmatchedPayments: UnmatchedPayment[] = [];
 
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        if (row.length < headers.length) continue;
-
-        const receiptId = row[headers.indexOf('Receipt ID')];
-        if (!receiptId) continue;
-
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        console.log(`Processing row ${i}:`, row);
+        
+        const receiptId = row['Receipt ID'];
+        console.log('Receipt ID:', receiptId);
+        
+        if (!receiptId) {
+          console.log('Skipping row - no receipt ID');
+          continue;
+        }
+        
         // Check if payment already exists
         const existingPayment = await checkExistingPayment(receiptId);
-        if (existingPayment) continue;
-
-        const email = row[headers.indexOf('Donor Email')];
-        if (!email) continue;
-
-        // Normalize email for comparison
-        const normalizedEmail = email.toLowerCase().trim();
-        console.log('Processing payment for email:', normalizedEmail);
-
-        // Try to find matching member
-        const member = await findMemberByEmail(normalizedEmail);
+        if (existingPayment) {
+          console.log('Skipping existing payment:', receiptId);
+          continue;
+        }
         
-        if (member) {
-          // If we found a matching member, create the payment record immediately
-          console.log('Found matching member, creating payment record:', member);
+        const email = row['Donor Email'];
+        console.log('Donor Email:', email);
+        
+        if (!email) {
+          console.log('Skipping row - no email');
+          continue;
+        }
+        
+        const normalizedEmail = email.toLowerCase().trim();
+        const url = row['Fundraising Page'] || '';
+        console.log('Fundraising Page URL:', url);
+        
+        // Improved URL slug extraction with debugging
+        let urlSlug = '';
+        if (url) {
+          console.log('Processing URL:', url);
+          try {
+            const urlObj = new URL(url);
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
+            urlSlug = pathParts[pathParts.length - 1] || '';
+            console.log('Extracted URL slug:', urlSlug);
+          } catch (e) {
+            // Fallback to simple split if URL parsing fails
+            urlSlug = url.split('/').filter(Boolean).pop() || '';
+            console.log('Fallback URL slug:', urlSlug);
+          }
+        } else {
+          console.log('No URL found for payment:', receiptId);
+        }
+        
+        const isSwagPayment = url.includes('/nwswag');
+        const isAnnualMembership = url.includes('/nwannualmembership');
+        const isSustainer = url.includes('/nwclub-sustainer');
+        const isRecurring = !!row['Recurring Total Months'];
+        const amount = parseFloat(row['Amount']);
+        
+        console.log('Payment analysis:', {
+          receiptId,
+          url,
+          urlSlug,
+          isSwagPayment,
+          isAnnualMembership,
+          isSustainer,
+          isRecurring,
+          amount
+        });
+        
+        if (isSwagPayment) {
+          console.log('Skipping swag payment:', receiptId);
+          continue;
+        }
+        
+        const member = await findMemberByEmail(normalizedEmail);
+        const shouldAutoProcess =
+          isAnnualMembership ||
+          isSustainer ||
+          (member && (isRecurring || amount >= 25));
+          
+        console.log('Auto-process decision:', {
+          isAnnualMembership,
+          isSustainer,
+          hasMember: !!member,
+          isRecurring,
+          amount,
+          shouldAutoProcess
+        });
+        
+        if (shouldAutoProcess) {
           try {
             await createPaymentRecord({
               receiptId: receiptId,
-              date: row[headers.indexOf('Date')],
-              amount: parseFloat(row[headers.indexOf('Amount')]),
-              isRecurring: row[headers.indexOf('Recurring Total Months')] ? true : false,
+              date: row['Date'],
+              amount: amount,
+              isRecurring: isRecurring,
               donorEmail: normalizedEmail,
-              donorFirstName: row[headers.indexOf('Donor First Name')],
-              donorLastName: row[headers.indexOf('Donor Last Name')],
-              donorAddress: row[headers.indexOf('Donor Addr1')],
-              donorCity: row[headers.indexOf('Donor City')],
-              donorState: row[headers.indexOf('Donor State')],
-              donorZip: row[headers.indexOf('Donor ZIP')],
-              donorPhone: row[headers.indexOf('Donor Phone')],
+              donorFirstName: row['Donor First Name'],
+              donorLastName: row['Donor Last Name'],
+              donorAddress: row['Donor Addr1'],
+              donorCity: row['Donor City'],
+              donorState: row['Donor State'],
+              donorZip: row['Donor ZIP'],
+              donorPhone: row['Donor Phone'],
+              url,
+              urlSlug,
               rawData: row
-            }, member.id);
-            console.log('Successfully created payment record for member:', member.id);
+            }, member ? member.id : undefined);
+            console.log('Successfully auto-processed payment:', receiptId);
           } catch (error) {
-            console.error('Error creating payment record for matched member:', error);
-            // If there's an error creating the payment, add it to unmatched payments
+            console.error('Error auto-processing payment:', error);
             unmatchedPayments.push({
               receiptId: receiptId,
-              date: row[headers.indexOf('Date')],
-              amount: parseFloat(row[headers.indexOf('Amount')]),
-              isRecurring: row[headers.indexOf('Recurring Total Months')] ? true : false,
+              date: row['Date'],
+              amount: amount,
+              isRecurring: isRecurring,
               donorEmail: normalizedEmail,
-              donorFirstName: row[headers.indexOf('Donor First Name')],
-              donorLastName: row[headers.indexOf('Donor Last Name')],
-              donorAddress: row[headers.indexOf('Donor Addr1')],
-              donorCity: row[headers.indexOf('Donor City')],
-              donorState: row[headers.indexOf('Donor State')],
-              donorZip: row[headers.indexOf('Donor ZIP')],
-              donorPhone: row[headers.indexOf('Donor Phone')],
+              donorFirstName: row['Donor First Name'],
+              donorLastName: row['Donor Last Name'],
+              donorAddress: row['Donor Addr1'],
+              donorCity: row['Donor City'],
+              donorState: row['Donor State'],
+              donorZip: row['Donor ZIP'],
+              donorPhone: row['Donor Phone'],
+              url,
+              urlSlug,
               rawData: row
             });
           }
-        } else {
-          // If no matching member, add to unmatched payments
-          unmatchedPayments.push({
-            receiptId: receiptId,
-            date: row[headers.indexOf('Date')],
-            amount: parseFloat(row[headers.indexOf('Amount')]),
-            isRecurring: row[headers.indexOf('Recurring Total Months')] ? true : false,
-            donorEmail: normalizedEmail,
-            donorFirstName: row[headers.indexOf('Donor First Name')],
-            donorLastName: row[headers.indexOf('Donor Last Name')],
-            donorAddress: row[headers.indexOf('Donor Addr1')],
-            donorCity: row[headers.indexOf('Donor City')],
-            donorState: row[headers.indexOf('Donor State')],
-            donorZip: row[headers.indexOf('Donor ZIP')],
-            donorPhone: row[headers.indexOf('Donor Phone')],
-            rawData: row
-          });
+          continue;
         }
+        
+        console.log('Adding to unmatched payments:', receiptId);
+        unmatchedPayments.push({
+          receiptId: receiptId,
+          date: row['Date'],
+          amount: amount,
+          isRecurring: isRecurring,
+          donorEmail: normalizedEmail,
+          donorFirstName: row['Donor First Name'],
+          donorLastName: row['Donor Last Name'],
+          donorAddress: row['Donor Addr1'],
+          donorCity: row['Donor City'],
+          donorState: row['Donor State'],
+          donorZip: row['Donor ZIP'],
+          donorPhone: row['Donor Phone'],
+          url,
+          urlSlug,
+          rawData: row
+        });
         setProgress(prev => prev ? { ...prev, current: i + 1 } : null);
       }
-
+      
+      console.log('Final unmatched payments count:', unmatchedPayments.length);
       setUnmatchedPayments(unmatchedPayments);
+      console.log('Unmatched payments with URL slugs:', unmatchedPayments.map(p => ({
+        receiptId: p.receiptId,
+        url: p.url,
+        urlSlug: p.urlSlug,
+        donorEmail: p.donorEmail
+      })));
       setAlert({
         type: 'success',
-        message: `Found ${unmatchedPayments.length} new payments to process. Please review and match them with existing members or create new members below.`
+        message: `Import completed! ${unmatchedPayments.length} payments require manual review. Membership payments (annual, sustainer, recurring, or >=$25) were automatically processed. Swag payments were skipped.`
       });
     } catch (error) {
       console.error('Error processing ActBlue file:', error);
@@ -371,7 +455,7 @@ const AdminImports: React.FC = () => {
   };
 
   // Create a payment record
-  const createPaymentRecord = async (payment: UnmatchedPayment, memberId: string) => {
+  const createPaymentRecord = async (payment: UnmatchedPayment, memberId: string | undefined) => {
     try {
       const { error } = await supabase
         .from('payments')
@@ -478,6 +562,109 @@ const AdminImports: React.FC = () => {
         message: error instanceof Error ? error.message : 'Failed to create new member'
       });
     }
+  };
+
+  // Batch process all unmatched payments as new members
+  const handleBatchCreateMembers = async () => {
+    if (!defaultMembershipType) {
+      setAlert({
+        type: 'error',
+        message: 'Please select a default membership type before processing'
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    setProgress({ current: 0, total: unmatchedPayments.length, message: 'Creating members...' });
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < unmatchedPayments.length; i++) {
+      const payment = unmatchedPayments[i];
+      try {
+        // Calculate renewal dates based on payment date
+        const paymentDateObj = utcToZonedTime(parseISO(payment.date), timeZone);
+        const paymentMonth = paymentDateObj.getMonth() + 1;
+        const currentYear = paymentDateObj.getFullYear();
+        
+        // Determine if payment qualifies for membership (≥ $25)
+        const qualifiesForMembership = payment.amount >= 25;
+        
+        // Set renewal date based on payment month and amount
+        let renewalDate: string | null = null;
+        if (qualifiesForMembership) {
+          if (paymentMonth >= 10) {
+            renewalDate = new Date(currentYear + 1, 11, 31).toISOString();
+          } else {
+            renewalDate = new Date(currentYear, 11, 31).toISOString();
+          }
+        }
+
+        // Find the selected membership type to get its value
+        const selectedType = membershipTypes.find(type => type.id === defaultMembershipType);
+        if (!selectedType) {
+          throw new Error('Selected membership type not found');
+        }
+
+        const { data: newMember, error: memberError } = await supabase
+          .from('members')
+          .insert([{
+            first_name: payment.donorFirstName,
+            last_name: payment.donorLastName,
+            email: payment.donorEmail,
+            phone: payment.donorPhone,
+            address: payment.donorAddress,
+            city: payment.donorCity,
+            state: payment.donorState,
+            zip: payment.donorZip,
+            status: qualifiesForMembership ? 'active' : 'inactive',
+            membership_type: selectedType.value,
+            renewal_date: renewalDate,
+            joined_date: new Date().toISOString()
+          }])
+          .select()
+          .single();
+
+        if (memberError) throw memberError;
+
+        await createPaymentRecord(payment, newMember.id);
+        successCount++;
+      } catch (error) {
+        errorCount++;
+        const errorMessage = error instanceof Error 
+          ? `Error processing ${payment.donorFirstName} ${payment.donorLastName}: ${error.message}`
+          : `Error processing ${payment.donorFirstName} ${payment.donorLastName}: Unknown error`;
+        errors.push(errorMessage);
+      }
+
+      setProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+    }
+
+    setUnmatchedPayments([]);
+    setProgress(null);
+    setIsProcessing(false);
+
+    const resultMessage = `Batch processing completed: ${successCount} members created successfully, ${errorCount} errors`;
+    setAlert({
+      type: errorCount > 0 ? 'warning' : 'success',
+      message: (
+        <div className="space-y-4">
+          <div>{resultMessage}</div>
+          {errors.length > 0 && (
+            <div>
+              <div className="font-semibold mb-2">Failed Records:</div>
+              <ul className="list-disc pl-5 space-y-1">
+                {errors.map((error, index) => (
+                  <li key={index} className="text-sm">{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) as any
+    });
   };
 
   // Handle member file import
@@ -614,10 +801,12 @@ const AdminImports: React.FC = () => {
     switch (transformType) {
       case 'DATE':
         // Try different date formats
-        for (const format of TRANSFORMATION_TYPES.DATE.formats) {
+        for (const formatObj of TRANSFORMATION_TYPES.DATE.formats) {
           try {
-            const date = parse(value, format.value, new Date());
-            return format(date, 'yyyy-MM-dd');
+            const date = parse(value, formatObj.value, new Date());
+            if (isValid(date)) {
+              return format(date, 'yyyy-MM-dd');
+            }
           } catch (e) {
             continue;
           }
@@ -663,7 +852,7 @@ const AdminImports: React.FC = () => {
       };
       
       Object.entries(sourceFields).forEach(([destField, sourceField]) => {
-        const sourceIndex = importPreview.headers.indexOf(sourceField);
+        const sourceIndex = importPreview.headers ? importPreview.headers.indexOf(sourceField || '') : -1;
         if (sourceIndex !== -1) {
           let value = row[sourceIndex];
           
@@ -683,9 +872,9 @@ const AdminImports: React.FC = () => {
             case 'renewal_date':
               if (value) {
                 // Try different date formats
-                for (const format of TRANSFORMATION_TYPES.DATE.formats) {
+                for (const formatObj of TRANSFORMATION_TYPES.DATE.formats) {
                   try {
-                    const date = parse(value, format.value, new Date());
+                    const date = parse(value, formatObj.value, new Date());
                     if (isValid(date)) {
                       value = format(date, 'yyyy-MM-dd');
                       break;
@@ -792,16 +981,14 @@ const AdminImports: React.FC = () => {
           }
 
           // If member is admin, ensure they exist in admins table
-          if (memberData.is_admin) {
-            const { error: adminError } = await supabase
-              .from('admins')
-              .upsert({ user_id: confirmation.existingMember.user_id }, { onConflict: 'user_id' });
+          const { error: adminError } = await supabase
+            .from('admins')
+            .upsert({ user_id: confirmation.existingMember.id }, { onConflict: 'user_id' });
             
             if (adminError) {
               console.error('Error updating admin status:', adminError);
               throw adminError;
             }
-          }
 
           successCount++;
         } else if (confirmation.action === 'new') {
@@ -863,7 +1050,7 @@ const AdminImports: React.FC = () => {
             </div>
           )}
         </div>
-      )
+      ) as any
     });
 
     setIsProcessingImport(false);
@@ -874,8 +1061,8 @@ const AdminImports: React.FC = () => {
     ...MEMBER_FIELDS.map(field => ({
       header: field.label,
       accessor: (row: any) => {
-        const sourceField = importPreview.mapping.sourceFields[field.id];
-        const sourceIndex = importPreview.headers.indexOf(sourceField);
+        const sourceField = importPreview && importPreview.mapping && importPreview.mapping.sourceFields[field.id];
+        const sourceIndex = importPreview && importPreview.headers ? importPreview.headers.indexOf(sourceField || '') : -1;
         const value = sourceIndex !== -1 ? row[sourceIndex] : '';
         
         // Apply transformations for preview
@@ -883,11 +1070,13 @@ const AdminImports: React.FC = () => {
         if (field.id === 'phone' || field.id === 'emergency_contact_phone') {
           displayValue = value ? value.replace(/\D/g, '') : '';
         } else if (field.id === 'birthdate' && value) {
-          for (const format of TRANSFORMATION_TYPES.DATE.formats) {
+          for (const formatObj of TRANSFORMATION_TYPES.DATE.formats) {
             try {
-              const date = parse(value, format.value, new Date());
-              displayValue = format(date, 'yyyy-MM-dd');
-              break;
+              const date = parse(value, formatObj.value, new Date());
+              if (isValid(date)) {
+                displayValue = format(date, 'yyyy-MM-dd');
+                break;
+              }
             } catch (e) {
               continue;
             }
@@ -966,14 +1155,28 @@ const AdminImports: React.FC = () => {
                     {unmatchedPayments.map((payment) => (
                       <div key={payment.receiptId} className="border rounded-lg p-4">
                         <div className="flex justify-between items-start">
-                          <div>
+                          <div className="flex-1">
                             <h3 className="font-medium">
                               {payment.donorFirstName} {payment.donorLastName}
                             </h3>
                             <p className="text-sm text-gray-500">{payment.donorEmail}</p>
-                            <p className="text-sm">
-                              ${payment.amount} on {format(utcToZonedTime(parseISO(payment.date), timeZone), 'MMM d, yyyy')}
-                            </p>
+                            <div className="mt-2 space-y-1">
+                              <p className="text-sm">
+                                <span className="font-medium">${payment.amount}</span> on {format(utcToZonedTime(parseISO(payment.date), timeZone), 'MMM d, yyyy')}
+                                {payment.isRecurring && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    Recurring
+                                  </span>
+                                )}
+                                {payment.urlSlug && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    {payment.urlSlug}
+                                  </span>
+                                )}
+                              </p>
+                              {/* DEBUG: Show full payment object */}
+                              <pre style={{ fontSize: '10px', color: '#888', background: '#f9f9f9', padding: '4px', borderRadius: '4px' }}>{JSON.stringify(payment, null, 2)}</pre>
+                            </div>
                           </div>
                           <div className="flex space-x-2">
                             <select
@@ -1031,6 +1234,15 @@ const AdminImports: React.FC = () => {
                             </option>
                           ))}
                         </select>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          onClick={handleBatchCreateMembers}
+                          disabled={!defaultMembershipType || isProcessing}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          {isProcessing ? 'Processing...' : `Create All Members (${unmatchedPayments.length})`}
+                        </Button>
                       </div>
                     </div>
                   </div>
