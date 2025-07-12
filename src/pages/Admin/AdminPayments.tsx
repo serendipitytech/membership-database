@@ -444,10 +444,24 @@ const AdminPayments: React.FC = () => {
     const summaries = new Map<string, MemberPaymentSummary>();
     
     payments.forEach(payment => {
+      // Try to get a full member object (with id, email) from the members array
+      let memberObj: Member | undefined = payment.member as Member;
+      if (!memberObj || !memberObj.id) {
+        memberObj = members.find(m => m.id === payment.member_id);
+      }
+      if (!memberObj) {
+        // Fallback: create a dummy member object to satisfy the type
+        memberObj = {
+          id: payment.member_id,
+          first_name: payment.member?.first_name || '',
+          last_name: payment.member?.last_name || '',
+          email: ''
+        };
+      }
       if (!summaries.has(payment.member_id)) {
         summaries.set(payment.member_id, {
           member_id: payment.member_id,
-          member: payment.member!,
+          member: memberObj,
           total_amount: 0,
           payment_count: 0,
           last_payment_date: payment.date,
@@ -467,7 +481,7 @@ const AdminPayments: React.FC = () => {
     });
     
     return Array.from(summaries.values());
-  }, [payments]);
+  }, [payments, members]);
 
   // Add useEffect to refetch payments when date range changes
   useEffect(() => {
@@ -742,7 +756,7 @@ const AdminPayments: React.FC = () => {
                 {
                   header: 'Member',
                   accessor: 'member',
-                  render: (value: Member) => `${value.first_name} ${value.last_name}`
+                  render: (value: Member | null | undefined) => value ? `${value.first_name} ${value.last_name}` : 'Unknown Member'
                 },
                 {
                   header: 'Total Contributions',
@@ -762,17 +776,20 @@ const AdminPayments: React.FC = () => {
                   header: 'Actions',
                   accessor: 'member_id',
                   render: (value: string, row: MemberPaymentSummary) => (
-                    <Button
-                      onClick={() => handleViewTransactions(value, row.member)}
-                      variant="outline"
-                      size="sm"
-                    >
-                      View Transactions
-                    </Button>
+                    row.member ? (
+                      <Button
+                        onClick={() => handleViewTransactions(value, row.member)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        View Transactions
+                      </Button>
+                    ) : (
+                      <span className="text-gray-400">No Member</span>
+                    )
                   )
                 }
               ]}
-              isLoading={isLoading}
             />
           </div>
         </Card>
@@ -843,7 +860,6 @@ const AdminPayments: React.FC = () => {
                     )
                   }
                 ]}
-                isLoading={false}
               />
             </div>
           </div>
