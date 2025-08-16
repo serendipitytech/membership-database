@@ -53,7 +53,7 @@ const brandConfig: BrandConfig = {
   },
 
   // Donation Links
-  actBlueUrl: "https://secure.actblue.com/donate/nwvolusiademocrats",
+  actBlueUrl: "https://secure.actblue.com/donate/nwclub-sustainer",
   actBlueUrls: {
     membership: [
       "https://secure.actblue.com/page/nwannualmembership",
