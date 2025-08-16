@@ -86,8 +86,8 @@ const PaymentPage: React.FC = () => {
   }, [memberId, navigate]);
 
   const handleActBluePayment = () => {
-    // Redirect to ActBlue with the correct parameters
-    window.location.href = `${brandConfig.actBlueUrl}?amount=${membershipFee}`;
+    // Redirect to ActBlue with the static sustainer URL
+    window.location.href = 'https://secure.actblue.com/donate/nwclub-sustainer';
     
     setAlert({
       type: 'info',
